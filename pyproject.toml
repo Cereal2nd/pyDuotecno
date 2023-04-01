@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name        = "pyDuotecno"
+version     = "2023.4.0"
+license     = {text = "Apache"}
+description = "Open-source home automation platform running on Python 3."
+readme      = "README.md"
+authors     = [
+    {name = "Maikel Punie", email = "maikel.punie@gmail.com"}
+]
+keywords    = ["home", "duotecno", "automation"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Home Automation",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+requires-python = ">=3.9.0"
+dependencies    = [
+]
+
+[project.urls]
+"Source Code" = "https://github.com/Cereal2nd/pyDuotecno"
+"Bug Reports" = "https://github.com/Cereal2nd/pyDuotecno/issues"
+
+[tool.setuptools]
+platforms = ["any"]
+zip-safe  = false
+include-package-data = true
+
+[tool.setuptools.packages.find]
+exclude = ["tests", "tests.*"]
