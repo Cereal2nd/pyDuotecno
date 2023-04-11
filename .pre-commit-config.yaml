@@ -36,8 +36,6 @@ repos:
       - id: bandit
         args:
           - --quiet
-          - --format=custom
-          - --configfile=tests/bandit.yaml
         files: ^.*/.+\.py$
   - repo: https://github.com/PyCQA/isort
     rev: 5.12.0
