@@ -3,11 +3,12 @@
 import asyncio
 import logging
 import sys
+from duotecno.protocol import Packet
 
 
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 logging.getLogger("asyncio").setLevel(logging.DEBUG)
-log = logging.getLogger("test")
+log = logging.getLogger()
 
 
 class PyDuotecno:
@@ -50,5 +51,10 @@ class PyDuotecno:
             tmp = tmp.decode().rstrip()
             if not tmp.startswith("["):
                 tmp = tmp.lstrip("[")
-            log.debug(f"Receive: {tmp}")
+            tmp = tmp.replace("\x00", "")
+            # log.debug(f"Receive: {tmp}")
+            tmp = tmp[1:-1]
+            p = tmp.split(",")
+            pc = Packet(int(p[0]), int(p[1]), p[2:])
+            log.debug(f"Receive: {pc}")
             self.loginOK.set()
