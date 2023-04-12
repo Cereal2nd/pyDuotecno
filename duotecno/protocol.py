@@ -1,5 +1,6 @@
 from enum import Enum, unique
 from dataclasses import dataclass, field
+import collections
 import sys
 import json
 
@@ -27,7 +28,7 @@ class MsgType(Enum):
     EV_NODEMANAGEMENTINFO = 74
     EV_ACCESSLEVELSET = 75
     EV_VIDEOPHONESTATUS = 76
-    EV_UNKNOWN = 77
+    EV_REGISTERMAP = 77
     FC_UNITDIMREQUESTSTATUS = 131
     FC_UNITSENSSET = 136
     FC_UNITREQUESTSENSSTATUS = 137
@@ -57,6 +58,7 @@ class MsgType(Enum):
     FC_NODEDATABASESET = 221
     FC_ACCESSLEVELSET = 222
     FC_VIDEOPHONESET = 223
+    FC_REGISTERMAP = 224
 
 
 @dataclass
@@ -65,22 +67,27 @@ class Packet:
 
     cmdName: str = field(init=False)
     cmdCode: int = field(repr=False)
-    method: str
-    data: list
+    method: int
+    data: collections.deque
     cls: type = field(init=False)
 
     def __post_init__(self):
         """fill in the command nae, make the subsclass."""
         self.cmdName = MsgType(self.cmdCode)
-        try:
-            tmp = getattr(sys.modules[__name__], MsgType(self.cmdCode).name)
+        self.data = collections.deque(self.data)
+        tmp = getattr(
+            sys.modules[__name__], f"{MsgType(self.cmdCode).name}_{self.method}", None
+        )
+        if tmp:
             self.cls = tmp(self.data)
-        except Exception as e:
-            print(e)
+        else:
             self.cls = None
 
 
 class BaseMessage:
+    def __init__(self, data) -> None:
+        pass
+
     def to_json(self) -> str:
         return json.dumps(self.to_json_basic())
 
@@ -104,8 +111,121 @@ class BaseMessage:
         return self.to_json()
 
 
-class EV_CLIENTCONNECTSET(BaseMessage):
+class BaseNodeUnitMessage(BaseMessage):
+    nodeId: int
+    unitId: int
+    unitType: int
+
+    def __init__(self, data):
+        super().__init__(data)
+        self.nodeId = data.popleft()
+        self.unitId = data.popleft()
+        self.unitType = data.popleft()
+
+
+class EV_CLIENTCONNECTSET_3(BaseMessage):
     loginOk: bool
 
     def __init__(self, data):
-        self.loginOK = data[0]
+        self.loginOK = data.popleft()
+
+
+class EV_NODEDATABASEINFO_0(BaseMessage):
+    numNode: int
+
+    def __init__(self, data):
+        self.numNode = data.popleft()
+
+
+@unique
+class NodeType(Enum):
+    Standard = 1
+    Gateway = 4
+    Modem = 8
+    Gui = 32
+
+
+class EV_NODEDATABASEINFO_1(BaseMessage):
+    index: int
+    address: int
+    nodeName: str
+    numUnits: int
+    nodeType: int
+    nodeTypeName: NodeType
+    flags: int
+
+    def __init__(self, data):
+        self.index = data.popleft()
+        self.address = data.popleft()
+        # next 4 are no needed
+        [data.popleft() for _i in range(4)]
+        self.nodeName = "".join([chr(data.popleft()) for _i in range(data.popleft())])
+        self.numUnits = data.popleft()
+        self.nodeType = data.popleft()
+        self.nodeTypeName = NodeType(self.nodeType).name
+        self.flags = data.popleft()
+
+
+@unique
+class UnitType(Enum):
+    DIM = 1
+    SWITCH = 2
+    CONTROL = 3
+    SEND = 4
+    AUDIO_EXT = 5
+    VIRTUAL = 7
+    DUOSWITCH = 8
+    AUDIO_BASIC = 10
+    AVMATRIC = 11
+    IRTX = 12
+    VIDEOMUX = 14
+
+
+class EV_NODEDATABASEINFO_2(BaseMessage):
+    address: int
+    unit: int
+    laddress: int
+    lunit: int
+    unitName: str
+    unitType: int
+    unitTypeName: UnitType
+    unitFlags: int
+
+    def __init__(self, data):
+        self.address = data.popleft()
+        self.unit = data.popleft()
+        self.laddress = data.popleft()
+        self.lunit = data.popleft()
+        self.unitName = "".join([chr(data.popleft()) for _i in range(data.popleft())])
+        self.unitType = data.popleft()
+        self.unitTypeName = UnitType(self.unitType).name
+        self.unitFlags = data.popleft()
+
+
+class EV_UNITSENSSTATUS_0(BaseNodeUnitMessage):
+    controlState: int
+    state: int
+    preset: int
+
+    def __init__(self, data) -> None:
+        super().__init__(data)
+        self.controlState = data.popleft()
+        self.state = data.popleft()
+        self.preset = data.popleft()
+
+
+class EV_UNITSENSSTATUS_1(EV_UNITSENSSTATUS_0):
+    def __init__(self, data) -> None:
+        super().__init__(data)
+
+
+class EV_UNITDIMSTATUS_0(BaseNodeUnitMessage):
+    state: int
+    dimValue: int
+
+    def __init__(self, data) -> None:
+        super().__init__(data)
+        # config, reserved
+        data.popleft()
+        self.state = data.popleft()
+        self.dimValue = data.popleft()
