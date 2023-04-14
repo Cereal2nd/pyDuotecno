@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 import collections
 import sys
 import json
+import logging
 
 
 @unique
@@ -72,14 +73,18 @@ class Packet:
     cls: type = field(init=False)
 
     def __post_init__(self):
-        """fill in the command nae, make the subsclass."""
-        self.cmdName = MsgType(self.cmdCode)
+        """fill in the command name, make the subsclass."""
+        try:
+            self.cmdName = MsgType(self.cmdCode).name
+        except ValueError:
+            self.cmdName = "UNKNOWN"
         self.data = collections.deque(self.data)
-        tmp = getattr(
-            sys.modules[__name__], f"{MsgType(self.cmdCode).name}_{self.method}", None
-        )
+        tmp = getattr(sys.modules[__name__], f"{self.cmdName}_{self.method}", None)
         if tmp:
             self.cls = tmp(self.data)
+            # self.data should be empty once the message consumed it
+            if self.data.length() != 0:
+                print(f"ERROR!!! Not all data consumed: {self}")
         else:
             self.cls = None
 
@@ -219,8 +224,28 @@ class EV_UNITSENSSTATUS_1(EV_UNITSENSSTATUS_0):
         super().__init__(data)
 
 
+@unique
+class SwitchStatus(Enum):
+    OFF = 0
+    ON = 1
+    PIRTIMED = 2
+
+
+class EV_UNITSWITCHSTATUS_0(BaseNodeUnitMessage):
+    state: int
+    stateName: SwitchStatus
+
+    def __init__(self, data) -> None:
+        super().__init__(data)
+        # config, reserved
+        data.popleft()
+        self.state = data.popleft()
+        self.stateName = SwitchStatus(self.state).name
+
+
 class EV_UNITDIMSTATUS_0(BaseNodeUnitMessage):
     state: int
+    stateName: SwitchStatus
     dimValue: int
 
     def __init__(self, data) -> None:
@@ -228,4 +253,5 @@ class EV_UNITDIMSTATUS_0(BaseNodeUnitMessage):
         # config, reserved
         data.popleft()
         self.state = data.popleft()
+        self.stateName = SwitchStatus(self.state).name
         self.dimValue = data.popleft()
