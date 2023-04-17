@@ -83,7 +83,7 @@ class Packet:
         if tmp:
             self.cls = tmp(self.data)
             # self.data should be empty once the message consumed it
-            if self.data.length() != 0:
+            if len(self.data) != 0:
                 print(f"ERROR!!! Not all data consumed: {self}")
         else:
             self.cls = None

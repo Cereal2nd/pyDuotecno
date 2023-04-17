@@ -1,3 +1,4 @@
+import logging
 from duotecno.protocol import (
     Packet,
     EV_CLIENTCONNECTSET_3,
@@ -9,6 +10,7 @@ from duotecno.protocol import (
 
 class PacketHandler:
     def __init__(self, write, nodes, loginOK):
+        self._log = logging.getLogger("packethandler")
         self.write = write
         self.loginOK = loginOK
         self.nodes = nodes

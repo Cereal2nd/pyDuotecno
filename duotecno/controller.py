@@ -6,10 +6,6 @@ import sys
 from duotecno.protocol import Packet
 from duotecno.handler import PacketHandler
 
-logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
-logging.getLogger("asyncio").setLevel(logging.DEBUG)
-log = logging.getLogger()
-
 
 class PyDuotecno:
     """Class that will will do the bus management.
@@ -28,6 +24,7 @@ class PyDuotecno:
 
     async def connect(self, host, port, password) -> None:
         """Initialize the connection."""
+        self._log = logging.getLogger("pyduotecno")
         self.reader, self.writer = await asyncio.open_connection(host, port)
         self.readerTask = asyncio.Task(self.readTask())
         self.loginOK = asyncio.Event()
@@ -40,7 +37,7 @@ class PyDuotecno:
 
     async def write(self, msg) -> None:
         """Send a message."""
-        log.debug(f"Send: {msg}")
+        self._log.debug(f"Send: {msg}")
         msg = f"{msg}{chr(10)}"
         self.writer.write(msg.encode())
         await self.writer.drain()
@@ -59,7 +56,7 @@ class PyDuotecno:
             try:
                 pc = Packet(int(p[0]), int(p[1]), [int(_i) for _i in p[2:]])
             except Exception as e:
-                log.error(e)
-                log.error(tmp)
-            log.debug(f"Receive: {pc}")
+                self._log.error(e)
+                self._log.error(tmp)
+            self._log.debug(f"Receive: {pc}")
             await self.handler.handle(pc)
