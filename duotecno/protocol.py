@@ -117,14 +117,14 @@ class BaseMessage:
 
 
 class BaseNodeUnitMessage(BaseMessage):
-    nodeId: int
-    unitId: int
+    address: int
+    unit: int
     unitType: int
 
     def __init__(self, data):
         super().__init__(data)
-        self.nodeId = data.popleft()
-        self.unitId = data.popleft()
+        self.address = data.popleft()
+        self.unit = data.popleft()
         self.unitType = data.popleft()
 
 

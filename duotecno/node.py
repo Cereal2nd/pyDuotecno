@@ -35,9 +35,11 @@ class Node:
         if isinstance(packet, EV_NODEDATABASEINFO_2):
             if packet.unit not in self.units:
                 print(f"new unit: {packet.unitType}")
-                # self.units[packet.cls.unit] = Unit()
+                self.units[packet.unit] = BaseUnit(
+                    self, name=packet.unitName, unit=packet.unit, writer=self.write
+                )
                 # await self.units[packet.cls.unit].requestStatus()
             return
         if hasattr(packet, "unit") and packet.unit in self.units:
-            await self.units[packet.units].handlePacket(packet)
+            await self.units[packet.unit].handlePacket(packet)
             return
