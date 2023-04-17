@@ -3,8 +3,14 @@
 import asyncio
 import logging
 import sys
-from duotecno.protocol import Packet
-from duotecno.handler import PacketHandler
+from duotecno.protocol import (
+    Packet,
+    EV_CLIENTCONNECTSET_3,
+    EV_NODEDATABASEINFO_0,
+    EV_NODEDATABASEINFO_1,
+    EV_NODEDATABASEINFO_2,
+)
+from duotecno.node import Node
 
 
 class PyDuotecno:
@@ -19,7 +25,6 @@ class PyDuotecno:
     reader: asyncio.StreamReader = None
     readerTask: asyncio.Task
     loginOK: asyncio.Event
-    handler: PacketHandler = None
     nodes: dict
 
     async def connect(self, host, port, password) -> None:
@@ -29,7 +34,6 @@ class PyDuotecno:
         self.readerTask = asyncio.Task(self.readTask())
         self.loginOK = asyncio.Event()
         self.nodes = {}
-        self.handler = PacketHandler(self.write, self.nodes, self.loginOK)
         # TODO encode password
         await self.write("[214,3,8,100,117,111,116,101,99,110,111]")
         await self.loginOK.wait()
@@ -55,8 +59,34 @@ class PyDuotecno:
             p = tmp.split(",")
             try:
                 pc = Packet(int(p[0]), int(p[1]), [int(_i) for _i in p[2:]])
+                self._log.debug(f"Receive: {pc}")
             except Exception as e:
                 self._log.error(e)
                 self._log.error(tmp)
-            self._log.debug(f"Receive: {pc}")
-            await self.handler.handle(pc)
+            await self._handlePacket(pc)
+
+    async def _handlePacket(self, packet):
+        if isinstance(packet.cls, EV_CLIENTCONNECTSET_3):
+            if packet.cls.loginOK == 1:
+                self.loginOK.set()
+                return
+        if isinstance(packet.cls, EV_NODEDATABASEINFO_0):
+            for i in range(packet.cls.numNode - 1):
+                await self.write(f"[209,1,{i}]")
+            return
+        if isinstance(packet.cls, EV_NODEDATABASEINFO_1):
+            if packet.cls.address not in self.nodes:
+                self.nodes[packet.cls.address] = Node(
+                    name=packet.cls.nodeName,
+                    address=packet.cls.address,
+                    index=packet.cls.index,
+                    nodeType=packet.cls.nodeType,
+                    numUnits=packet.cls.numUnits,
+                    writer=self.write,
+                )
+                await self.nodes[packet.cls.address].requestUnits()
+            return
+        if hasattr(packet.cls, "address") and packet.cls.address in self.nodes:
+            await self.nodes[packet.cls.address].handlePacket(packet.cls)
+            return
+        print("TODO handle")
