@@ -1,3 +1,4 @@
+from typing import final
 from enum import Enum, unique
 from dataclasses import dataclass, field
 import collections
@@ -176,7 +177,7 @@ class UnitType(Enum):
     DIM = 1
     SWITCH = 2
     CONTROL = 3
-    SEND = 4
+    SENS = 4
     AUDIO_EXT = 5
     VIRTUAL = 7
     DUOSWITCH = 8
@@ -211,19 +212,43 @@ class EV_UNITSENSSTATUS_0(BaseNodeUnitMessage):
     controlState: int
     state: int
     preset: int
+    value: list
+    sun: list
+    halfsun: list
+    moon: list
+    halfmoon: list
 
     def __init__(self, data) -> None:
         super().__init__(data)
+        # config = reserved
+        data.popleft()
         self.controlState = data.popleft()
         self.state = data.popleft()
         self.preset = data.popleft()
+        self.value = [data.popleft(), data.popleft()]
+        self.sun = [data.popleft(), data.popleft()]
+        self.halfsun = [data.popleft(), data.popleft()]
+        self.moon = [data.popleft(), data.popleft()]
+        self.halfmoon = [data.popleft(), data.popleft()]
 
 
 class EV_UNITSENSSTATUS_1(EV_UNITSENSSTATUS_0):
+    offset: list
+    swing: list
+    workingMode: int
+    fanSpeed: int
+    swingMode: int
+
     def __init__(self, data) -> None:
         super().__init__(data)
+        self.offset = [data.popleft(), data.popleft()]
+        self.swing = [data.popleft(), data.popleft()]
+        self.workingMode = data.popleft()
+        self.fanSpeed = data.popleft()
+        self.swingMode = data.popleft()
 
 
+@final
 @unique
 class SwitchStatus(Enum):
     OFF = 0
@@ -255,3 +280,25 @@ class EV_UNITDIMSTATUS_0(BaseNodeUnitMessage):
         self.state = data.popleft()
         self.stateName = SwitchStatus(self.state).name
         self.dimValue = data.popleft()
+
+
+@final
+@unique
+class DuoswitchStatus(Enum):
+    IDLE = 0
+    IDLE_DOWN = 1
+    IDLE_UP = 2
+    BUSY_DOWN = 3
+    BUSY_UP = 4
+
+
+class EV_UNITDUOSWITCHSTATUS_0(BaseNodeUnitMessage):
+    state: int
+    stateName: DuoswitchStatus
+
+    def __init__(self, data) -> None:
+        super().__init__(data)
+        # config, reserved
+        data.popleft()
+        self.state = data.popleft()
+        self.stateName = DuoswitchStatus(self.state).name

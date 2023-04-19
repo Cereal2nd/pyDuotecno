@@ -25,22 +25,29 @@ class PyDuotecno:
     reader: asyncio.StreamReader = None
     readerTask: asyncio.Task
     loginOK: asyncio.Event
+    connectionOK: asyncio.Event
     nodes: dict
 
     async def connect(self, host, port, password) -> None:
         """Initialize the connection."""
         self._log = logging.getLogger("pyduotecno")
         self.reader, self.writer = await asyncio.open_connection(host, port)
+        self.connectionOK = asyncio.Event()
+        self.connectionOK.set()
         self.readerTask = asyncio.Task(self.readTask())
         self.loginOK = asyncio.Event()
         self.nodes = {}
-        # TODO encode password
-        await self.write("[214,3,8,100,117,111,116,101,99,110,111]")
+        passw = [str(ord(i)) for i in password]
+        await self.write(f"[214,3,{len(passw)},{','.join(passw)}]")
         await self.loginOK.wait()
         await self.write("[209,0]")
 
     async def write(self, msg) -> None:
         """Send a message."""
+        if self.writer.transport._conn_lost:
+            self.connectionOK.clear()
+            self._log("ERROR CONNECTION LOST")
+            return
         self._log.debug(f"Send: {msg}")
         msg = f"{msg}{chr(10)}"
         self.writer.write(msg.encode())
@@ -48,7 +55,7 @@ class PyDuotecno:
 
     async def readTask(self):
         """Reader task."""
-        while True:
+        while self.connectionOK.is_set():
             tmp = await self.reader.readline()
             tmp = tmp.decode().rstrip()
             if not tmp.startswith("["):
@@ -59,11 +66,11 @@ class PyDuotecno:
             p = tmp.split(",")
             try:
                 pc = Packet(int(p[0]), int(p[1]), [int(_i) for _i in p[2:]])
-                self._log.debug(f"Receive: {pc}")
             except Exception as e:
                 self._log.error(e)
                 self._log.error(tmp)
             await self._handlePacket(pc)
+        self._log("ERROR CONNECTION LOST")
 
     async def _handlePacket(self, packet):
         if isinstance(packet.cls, EV_CLIENTCONNECTSET_3):
@@ -89,4 +96,4 @@ class PyDuotecno:
         if hasattr(packet.cls, "address") and packet.cls.address in self.nodes:
             await self.nodes[packet.cls.address].handlePacket(packet.cls)
             return
-        print("TODO handle")
+        print(f"TODO handle this packet: {packet}")
