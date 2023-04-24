@@ -96,4 +96,4 @@ class PyDuotecno:
         if hasattr(packet.cls, "address") and packet.cls.address in self.nodes:
             await self.nodes[packet.cls.address].handlePacket(packet.cls)
             return
-        print(f"TODO handle this packet: {packet}")
+        self._log.debug(f"Ignoring packet: {packet}")

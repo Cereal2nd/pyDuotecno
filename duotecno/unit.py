@@ -25,17 +25,24 @@ class BaseUnit:
         self.node = node
         self.name = name
         self.unit = unit
-        self.write = writer
+        self.writer = writer
         self._log.info(
             f"New Unit: '{self.node.name}' => '{self.name}' = {type(self).__name__}"
         )
 
+    def __repr__(self) -> str:
+        items = []
+        for k, v in self.__dict__.items():
+            if k not in ["_log", "writer"]:
+                items.append(f"{k} = {v!r}")
+        return "{}[{}]".format(type(self), ", ".join(items))
+
     async def handlePacket(self, packet) -> None:
-        print(f"unit message {packet}")
+        self._log.debug(f"Unhandled unit packet: {packet}")
 
     async def requestStatus(self) -> None:
         if self._unitType:
-            await self.write(
+            await self.writer(
                 f"[209,3,{self.node.address},{self.unit},{self._unitType}]"
             )
 
