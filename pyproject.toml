@@ -3,7 +3,6 @@ requires = ["setuptools", "wheel"]
 
 [project]
 name        = "pyDuotecno"
-version     = "2023.4.0"
 license     = {text = "Apache"}
 description = "Open-source home automation platform running on Python 3."
 readme      = "README.md"
@@ -40,3 +39,20 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 exclude = ["tests", "tests.*"]
+
+[tool.bumpver]
+current_version = "2023.5.0"
+version_pattern = "YYYY.MM.INC0"
+commit_message = "bump version {old_version} -> {new_version}"
+commit = true
+tag = true
+push = true
+
+[tool.bumpver.file_patterns]
+"pyproject.toml" = [
+    'current_version = "{version}"',
+]
+"setup.py" = [
+    "{version}",
+    "{pep440_version}",
+]
