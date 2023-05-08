@@ -4,6 +4,7 @@ requires = ["setuptools", "wheel"]
 [project]
 name        = "pyDuotecno"
 license     = {text = "Apache"}
+version     = "2023.5.2"
 description = "Open-source home automation platform running on Python 3."
 readme      = "README.md"
 authors     = [
@@ -50,6 +51,7 @@ push = true
 
 [tool.bumpver.file_patterns]
 "pyproject.toml" = [
+    'version = "{version}"',
     'current_version = "{version}"',
 ]
 "setup.py" = [
