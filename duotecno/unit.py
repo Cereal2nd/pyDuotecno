@@ -30,6 +30,15 @@ class BaseUnit:
             f"New Unit: '{self.node.name}' => '{self.name}' = {type(self).__name__}"
         )
 
+    def get_node_address(self) -> str:
+        return self.node.get_address()
+
+    def get_node_name(self) -> str:
+        return self.node.get_name()
+
+    def get_name(self) -> str:
+        return self.name
+
     def __repr__(self) -> str:
         items = []
         for k, v in self.__dict__.items():
@@ -84,13 +93,16 @@ class DimUnit(BaseUnit):
 
 class SwitchUnit(BaseUnit):
     _unitType: final = 2
-    _state: int
+    _state: int = None
 
     async def handlePacket(self, packet) -> None:
         if isinstance(packet, EV_UNITSWITCHSTATUS_0):
             await self._update({"state": packet.state})
             return
         await super().handlePacket(packet)
+
+    def is_on(self):
+        return self._state
 
 
 class DuoswitchUnit(BaseUnit):
