@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from duotecno.exceptions import InvallidPassword, LoadFailure
 from duotecno.protocol import (
     Packet,
     EV_CLIENTCONNECTSET_3,
@@ -22,11 +23,10 @@ class PyDuotecno:
     writer: asyncio.StreamWriter = None
     reader: asyncio.StreamReader = None
     readerTask: asyncio.Task
-    loadTask: asyncio.Task
     loginOK: asyncio.Event
     connectionOK: asyncio.Event
     loadOK: asyncio.Event
-    nodes: dict
+    nodes: dict = {}
 
     def get_units(self, unit_type) -> list:
         res = []
@@ -35,22 +35,45 @@ class PyDuotecno:
                 res.append(unit)
         return res
 
-    async def connect(self, host, port, password) -> None:
+    async def connect(self, host, port, password, testOnly=False) -> None:
         """Initialize the connection."""
+        self.nodes = {}
         self._log = logging.getLogger("pyduotecno")
-        self.reader, self.writer = await asyncio.open_connection(host, port)
+        # try to connect
+        try:
+            self.reader, self.writer = await asyncio.open_connection(host, port)
+        except ConnectionError or TimeoutError:
+            raise
+        # events
         self.connectionOK = asyncio.Event()
-        self.connectionOK.set()
-        self.readerTask = asyncio.Task(self.readTask())
-        self.loadTask = asyncio.Task(self._loadTask())
         self.loginOK = asyncio.Event()
         self.loadOK = asyncio.Event()
-        self.nodes = {}
+        # at this point the connection should be ok
+        self.connectionOK.set()
+        self.loginOK.clear()
+        self.loadOK.clear()
+        # start the bus reading task
+        self.readerTask = asyncio.Task(self.readTask())
+        # start loading, this task will kill itself once finished
         passw = [str(ord(i)) for i in password]
+        # send login info
         await self.write(f"[214,3,{len(passw)},{','.join(passw)}]")
-        await self.loginOK.wait()
-        await self.write("[209,0]")
-        await self.loadOK.wait()
+        # wait for the login to be ok
+        try:
+            await asyncio.wait_for(self.loginOK.wait(), timeout=1.0)
+            await self.loginOK.wait()
+        except TimeoutError:
+            raise InvallidPassword()
+        # if we are not testing the connection, start scanning
+        if not testOnly:
+            await self.write("[209,0]")
+            _loadTask = asyncio.Task(self._loadTask())
+            try:
+                await asyncio.wait_for(self.loadOK.wait(), timeout=15.0)
+            except TimeoutError:
+                raise LoadFailure()
+            finally:
+                _loadTask.cancel()
 
     async def write(self, msg) -> None:
         """Send a message."""
@@ -64,14 +87,18 @@ class PyDuotecno:
         await self.writer.drain()
 
     async def _loadTask(self):
-        while not self.loadOK.is_set() and self.connectionOK.is_set():
+        while len(self.nodes) < 1:
+            await asyncio.sleep(1)
+        while not self.loadOK.is_set():
             c = 0
-            for n in self.nodes:
-                if n.is_loaded():
+            for n in self.nodes.values():
+                if n.isLoaded.is_set():
                     c += 1
             if c == len(self.nodes):
                 self.loadOK.set()
-        self.loadTask.cancel()
+                self._log.info("Loading finished")
+            else:
+                await asyncio.sleep(1)
 
     async def readTask(self):
         """Reader task."""

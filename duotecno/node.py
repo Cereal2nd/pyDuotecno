@@ -38,8 +38,9 @@ class Node:
         self.nodeType = nodeType
         self.writer = writer
         self.isLoaded = asyncio.Event()
+        self.isLoaded.clear()
         self.units = {}
-        self._log.info(f"New node found: {self.name}")
+        self._log.debug(f"New node found: {self.name}")
 
     def get_name(self) -> str:
         return self.name
@@ -86,7 +87,7 @@ class Node:
                     self, name=packet.unitName, unit=packet.unit, writer=self.writer
                 )
                 await self.units[packet.unit].requestStatus()
-            if len(self.units) == self.numUnits:
+            if len(self.units) == self.numUnits - 1:
                 self.isLoaded.set()
             return
         if hasattr(packet, "unit") and packet.unit in self.units:

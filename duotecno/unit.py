@@ -1,4 +1,4 @@
-from typing import final
+from typing import final, Awaitable, Callable
 import logging
 from duotecno.protocol import (
     EV_UNITDUOSWITCHSTATUS_0,
@@ -26,7 +26,7 @@ class BaseUnit:
         self.name = name
         self.unit = unit
         self.writer = writer
-        self._log.info(
+        self._log.debug(
             f"New Unit: '{self.node.name}' => '{self.name}' = {type(self).__name__}"
         )
 
@@ -38,6 +38,12 @@ class BaseUnit:
 
     def get_name(self) -> str:
         return self.name
+
+    def get_number(self) -> int:
+        return self.unit
+
+    def on_status_update(self, meth: Callable[[], Awaitable[None]]) -> None:
+        self._on_status_update.append(meth)
 
     def __repr__(self) -> str:
         items = []
@@ -103,6 +109,14 @@ class SwitchUnit(BaseUnit):
 
     def is_on(self):
         return self._state
+
+    async def turn_on(self):
+        """Switch on."""
+        await self.writer(f"[163,3,{self.node.address},{self.unit}]")
+
+    async def turn_off(self):
+        """Switch off."""
+        await self.writer(f"[163,2,{self.node.address},{self.unit}]")
 
 
 class DuoswitchUnit(BaseUnit):
