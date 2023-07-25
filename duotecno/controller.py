@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from duotecno.exceptions import InvallidPassword, LoadFailure
+from duotecno.exceptions import LoadFailure, InvalidPassword
 from duotecno.protocol import (
     Packet,
     EV_CLIENTCONNECTSET_3,
@@ -63,7 +63,7 @@ class PyDuotecno:
             await asyncio.wait_for(self.loginOK.wait(), timeout=1.0)
             await self.loginOK.wait()
         except TimeoutError:
-            raise InvallidPassword()
+            raise InvalidPassword()
         # if we are not testing the connection, start scanning
         if not testOnly:
             await self.write("[209,0]")
