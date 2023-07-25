@@ -129,6 +129,35 @@ class DuoswitchUnit(BaseUnit):
             return
         await super().handlePacket(packet)
 
+    def is_opening(self):
+        if self._state == 4:
+            return True
+        return False
+
+    def is_closing(self):
+        if self._state == 3:
+            return True
+        return False
+
+    def is_closed(self):
+        if self._state == 1:
+            return True
+        return False
+
+    async def up(self):
+        """Move up."""
+        await self.stop()
+        await self.writer(f"[182,0,{self.node.address},{self.unit},4]")
+
+    async def down(self):
+        """Move down."""
+        await self.stop()
+        await self.writer(f"[182,0,{self.node.address},{self.unit},5]")
+
+    async def stop(self):
+        """Stop the motor."""
+        await self.writer(f"[182,0,{self.node.address},{self.unit},3]")
+
 
 class VirtualUnit(BaseUnit):
     _unitType: final = 7
