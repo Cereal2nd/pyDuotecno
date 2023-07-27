@@ -25,7 +25,6 @@ class PyDuotecno:
     readerTask: asyncio.Task
     loginOK: asyncio.Event
     connectionOK: asyncio.Event
-    loadOK: asyncio.Event
     nodes: dict = {}
 
     def get_units(self, unit_type) -> list:
@@ -47,11 +46,9 @@ class PyDuotecno:
         # events
         self.connectionOK = asyncio.Event()
         self.loginOK = asyncio.Event()
-        self.loadOK = asyncio.Event()
         # at this point the connection should be ok
         self.connectionOK.set()
         self.loginOK.clear()
-        self.loadOK.clear()
         # start the bus reading task
         self.readerTask = asyncio.Task(self.readTask())
         # start loading, this task will kill itself once finished
@@ -67,13 +64,11 @@ class PyDuotecno:
         # if we are not testing the connection, start scanning
         if not testOnly:
             await self.write("[209,0]")
-            _loadTask = asyncio.Task(self._loadTask())
             try:
-                await asyncio.wait_for(self.loadOK.wait(), timeout=15.0)
+                await asyncio.wait_for(self._loadTask(), timeout=30.0)
             except TimeoutError:
                 raise LoadFailure()
-            finally:
-                _loadTask.cancel()
+            self._log.info("Loading finished")
 
     async def write(self, msg) -> None:
         """Send a message."""
@@ -88,17 +83,15 @@ class PyDuotecno:
 
     async def _loadTask(self):
         while len(self.nodes) < 1:
-            await asyncio.sleep(1)
-        while not self.loadOK.is_set():
+            await asyncio.sleep(3)
+        while True:
             c = 0
             for n in self.nodes.values():
                 if n.isLoaded.is_set():
                     c += 1
             if c == len(self.nodes):
-                self.loadOK.set()
-                self._log.info("Loading finished")
-            else:
-                await asyncio.sleep(1)
+                return
+            await asyncio.sleep(1)
 
     async def readTask(self):
         """Reader task."""
