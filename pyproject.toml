@@ -2,15 +2,15 @@
 requires = ["setuptools", "wheel"]
 
 [project]
-name        = "pyDuotecno"
-license     = {text = "Apache"}
-version     = "2023.7.3"
+name = "pyDuotecno"
+license = {text = "Apache"}
+version = "2023.7.3"
 description = "Open-source home automation platform running on Python 3."
-readme      = "README.md"
-authors     = [
+readme = "README.md"
+authors = [
     {name = "Maikel Punie", email = "maikel.punie@gmail.com"}
 ]
-keywords    = ["home", "duotecno", "automation"]
+keywords = ["home", "duotecno", "automation"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
@@ -26,8 +26,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 requires-python = ">=3.9.0"
-dependencies    = [
-]
+dependencies = []
 
 [project.urls]
 "Source Code" = "https://github.com/Cereal2nd/pyDuotecno"
