@@ -144,12 +144,12 @@ class DuoswitchUnit(BaseUnit):
             return True
         return False
 
-    async def up(self):
+    async def open(self):
         """Move up."""
         await self.stop()
         await self.writer(f"[182,0,{self.node.address},{self.unit},4]")
 
-    async def down(self):
+    async def close(self):
         """Move down."""
         await self.stop()
         await self.writer(f"[182,0,{self.node.address},{self.unit},5]")
