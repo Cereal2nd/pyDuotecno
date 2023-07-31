@@ -53,7 +53,3 @@ push = true
     'version = "{version}"',
     'current_version = "{version}"',
 ]
-"setup.py" = [
-    "{version}",
-    "{pep440_version}",
-]
