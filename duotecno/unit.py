@@ -96,6 +96,27 @@ class DimUnit(BaseUnit):
             return
         await super().handlePacket(packet)
 
+    def is_on(self) -> int:
+        if self._state == 0:
+            return 0
+        return 1
+
+    def get_dimmer_state(self) -> int:
+        return self._value
+
+    async def set_dimmer_state(self, value: int | None = None) -> None:
+        # first send on
+        if value and value > 0:
+            # set state and turn on
+            await self.writer(f"[162,3,{self.node.address},{self.unit},{value}]")
+            await self.writer(f"[162,10,{self.node.address},{self.unit}]")
+        elif value or self._state == 1:
+            # turn off
+            await self.writer(f"[162,9,{self.node.address},{self.unit}]")
+        else:
+            # send turn on (restore state)
+            await self.writer(f"[162,10,{self.node.address},{self.unit}]")
+
 
 class SwitchUnit(BaseUnit):
     _unitType: final = 2
