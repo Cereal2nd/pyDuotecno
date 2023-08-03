@@ -51,7 +51,7 @@ class BaseUnit:
     def __repr__(self) -> str:
         items = []
         for k, v in self.__dict__.items():
-            if k not in ["_log", "writer"]:
+            if k not in ["_log", "writer", "node"]:
                 items.append(f"{k} = {v!r}")
         return "{}[{}]".format(type(self), ", ".join(items))
 
@@ -86,6 +86,9 @@ class SensUnit(BaseUnit):
             await self._update(
                 {"state": packet.state, "value": packet.value, "preset": packet.preset}
             )
+            return
+        if isinstance(packet, EV_UNITMACROCOMMAND_0):
+            # TODO
             return
         await super().handlePacket(packet)
 
@@ -206,6 +209,7 @@ class VirtualUnit(BaseUnit):
             return
         if isinstance(packet, EV_UNITMACROCOMMAND_0):
             await self._update({"status": packet.state})
+            return
         await super().handlePacket(packet)
 
     def is_on(self):
@@ -214,3 +218,4 @@ class VirtualUnit(BaseUnit):
 
 class ControlUnit(VirtualUnit):
     _unitType: final = 3
+    pass
