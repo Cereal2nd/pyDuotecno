@@ -81,7 +81,6 @@ class Packet:
         self.data = collections.deque(self.data)
         tmp = getattr(sys.modules[__name__], f"{self.cmdName}_{self.method}", None)
         if tmp:
-            print(self.data)
             self.cls = tmp(self.data)
             # self.data should be empty once the message consumed it
             if len(self.data) != 0:
