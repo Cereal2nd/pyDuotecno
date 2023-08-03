@@ -27,7 +27,7 @@ class PyDuotecno:
     connectionOK: asyncio.Event
     nodes: dict = {}
 
-    def get_units(self, unit_type) -> list:
+    def get_units(self, unit_type: list | str) -> list:
         res = []
         for node in self.nodes.values():
             for unit in node.get_unit_by_type(unit_type):

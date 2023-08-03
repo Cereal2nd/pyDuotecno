@@ -81,6 +81,7 @@ class Packet:
         self.data = collections.deque(self.data)
         tmp = getattr(sys.modules[__name__], f"{self.cmdName}_{self.method}", None)
         if tmp:
+            print(self.data)
             self.cls = tmp(self.data)
             # self.data should be empty once the message consumed it
             if len(self.data) != 0:
@@ -119,12 +120,18 @@ class BaseMessage:
 class BaseNodeUnitMessage(BaseMessage):
     address: int
     unit: int
-    unitType: int
 
     def __init__(self, data):
         super().__init__(data)
         self.address = data.popleft()
         self.unit = data.popleft()
+
+
+class BaseNodeUnitTypeMessage(BaseNodeUnitMessage):
+    unitType: int
+
+    def __init__(self, data):
+        super().__init__(data)
         self.unitType = data.popleft()
 
 
@@ -140,6 +147,20 @@ class EV_NODEDATABASEINFO_0(BaseMessage):
 
     def __init__(self, data):
         self.numNode = data.popleft()
+
+
+class EV_UNITMACROCOMMAND_0(BaseNodeUnitMessage):
+    event: int
+    state: int
+    code1: int
+    code2: int
+
+    def __init__(self, data):
+        super().__init__(data)
+        self.event = data.popleft()
+        self.state = data.popleft()
+        self.code1 = data.popleft()
+        self.code2 = data.popleft()
 
 
 @unique
@@ -215,7 +236,7 @@ class SwitchStatus(Enum):
     PIRTIMED = 2
 
 
-class EV_UNITSWITCHSTATUS_0(BaseNodeUnitMessage):
+class EV_UNITSWITCHSTATUS_0(BaseNodeUnitTypeMessage):
     state: int
     stateName: SwitchStatus
 
@@ -227,7 +248,7 @@ class EV_UNITSWITCHSTATUS_0(BaseNodeUnitMessage):
         self.stateName = SwitchStatus(self.state).name
 
 
-class EV_UNITDIMSTATUS_0(BaseNodeUnitMessage):
+class EV_UNITDIMSTATUS_0(BaseNodeUnitTypeMessage):
     state: int
     stateName: SwitchStatus
     dimValue: int
@@ -251,7 +272,7 @@ class DuoswitchStatus(Enum):
     BUSY_UP = 4
 
 
-class EV_UNITDUOSWITCHSTATUS_0(BaseNodeUnitMessage):
+class EV_UNITDUOSWITCHSTATUS_0(BaseNodeUnitTypeMessage):
     state: int
     stateName: DuoswitchStatus
 
@@ -318,12 +339,12 @@ class SensFanspeed(Enum):
     AUTO = 255
 
 
-def sens_calc_value(msb: int, lsb: int):
+def sens_calc_value(msb: int, lsb: int) -> float:
     val = (256 * msb) + lsb
     return val / 10
 
 
-class EV_UNITSENSSTATUS_0(BaseNodeUnitMessage):
+class EV_UNITSENSSTATUS_0(BaseNodeUnitTypeMessage):
     config: int
     configName: SensType
     controlState: int
@@ -332,11 +353,11 @@ class EV_UNITSENSSTATUS_0(BaseNodeUnitMessage):
     stateName: SensState
     preset: int
     presetName: SensPreset
-    value: list
-    sun: list
-    halfsun: list
-    moon: list
-    halfmoon: list
+    value: float
+    sun: float
+    halfsun: float
+    moon: float
+    halfmoon: float
 
     def __init__(self, data) -> None:
         super().__init__(data)
@@ -356,8 +377,8 @@ class EV_UNITSENSSTATUS_0(BaseNodeUnitMessage):
 
 
 class EV_UNITSENSSTATUS_1(EV_UNITSENSSTATUS_0):
-    offset: list
-    swing: list
+    offset: float
+    swing: float
     workingMode: int
     workingModeName: SensWorkingmode
     fanSpeed: int
@@ -375,3 +396,22 @@ class EV_UNITSENSSTATUS_1(EV_UNITSENSSTATUS_0):
         self.fanSpeedName = SensFanspeed(self.fanSpeed).name
         self.swingMode = data.popleft()
         self.swingModeName = SensControl(self.swingMode).name
+
+
+@final
+@unique
+class ControLStatus(Enum):
+    OFF = 0
+    ON = 1
+
+
+class EV_UNITCONTROLSTATUS_0(BaseNodeUnitTypeMessage):
+    status: int
+    statusName: ControLStatus
+
+    def __init__(self, data) -> None:
+        super().__init__(data)
+        # config ignore
+        data.popleft()
+        self.status = data.popleft()
+        self.statusName = ControLStatus(self.status).name

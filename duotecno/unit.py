@@ -6,6 +6,8 @@ from duotecno.protocol import (
     EV_UNITSWITCHSTATUS_0,
     EV_UNITSENSSTATUS_0,
     EV_UNITSENSSTATUS_1,
+    EV_UNITCONTROLSTATUS_0,
+    EV_UNITMACROCOMMAND_0,
 )
 
 
@@ -129,6 +131,17 @@ class SwitchUnit(BaseUnit):
         if isinstance(packet, EV_UNITSWITCHSTATUS_0):
             await self._update({"state": packet.state})
             return
+        if isinstance(packet, EV_UNITMACROCOMMAND_0):
+            if packet.event == 5:
+                # pir timed
+                self._update({"state": 2})
+            elif packet.state == 0:
+                # OFF
+                self._update({"state": 0})
+            else:
+                # on
+                self._update({"state": 1})
+            return
         await super().handlePacket(packet)
 
     def is_on(self):
@@ -185,4 +198,19 @@ class DuoswitchUnit(BaseUnit):
 
 class VirtualUnit(BaseUnit):
     _unitType: final = 7
-    pass
+    _status: int
+
+    async def handlePacket(self, packet) -> None:
+        if isinstance(packet, EV_UNITCONTROLSTATUS_0):
+            await self._update({"status": packet.status})
+            return
+        if isinstance(packet, EV_UNITMACROCOMMAND_0):
+            await self._update({"status": packet.state})
+        await super().handlePacket(packet)
+
+    def is_on(self):
+        return self._status
+
+
+class ControlUnit(VirtualUnit):
+    _unitType: final = 3

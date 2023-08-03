@@ -9,6 +9,7 @@ from duotecno.unit import (
     DimUnit,
     DuoswitchUnit,
     VirtualUnit,
+    ControlUnit,
 )
 
 
@@ -55,11 +56,14 @@ class Node:
                 items.append(f"{k} = {v!r}")
         return "{}[{}]".format(type(self), ", ".join(items))
 
-    def get_unit_by_type(self, unit_type):
+    def get_unit_by_type(self, unit_type: list | str):
+        if isinstance(unit_type, str):
+            unit_type = [unit_type]
         res = []
         for unit in self.units.values():
-            if str(type(unit)) == f"<class 'duotecno.unit.{unit_type}'>":
-                res.append(unit)
+            for unitT in unit_type:
+                if str(type(unit)) == f"<class 'duotecno.unit.{unitT}'>":
+                    res.append(unit)
         return res
 
     async def load(self) -> None:
@@ -81,6 +85,8 @@ class Node:
                     u = DuoswitchUnit
                 elif packet.unitTypeName == "VIRTUAL":
                     u = VirtualUnit
+                elif packet.unitTypeName == "CONTROL":
+                    u = ControlUnit
                 else:
                     self._log.warning(f"Unhandled unitType: {packet.unitTypeName}")
                 self.units[packet.unit] = u(
