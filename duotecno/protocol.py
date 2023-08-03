@@ -207,46 +207,6 @@ class EV_NODEDATABASEINFO_2(BaseMessage):
         self.unitFlags = data.popleft()
 
 
-class EV_UNITSENSSTATUS_0(BaseNodeUnitMessage):
-    controlState: int
-    state: int
-    preset: int
-    value: list
-    sun: list
-    halfsun: list
-    moon: list
-    halfmoon: list
-
-    def __init__(self, data) -> None:
-        super().__init__(data)
-        # config = reserved
-        data.popleft()
-        self.controlState = data.popleft()
-        self.state = data.popleft()
-        self.preset = data.popleft()
-        self.value = [data.popleft(), data.popleft()]
-        self.sun = [data.popleft(), data.popleft()]
-        self.halfsun = [data.popleft(), data.popleft()]
-        self.moon = [data.popleft(), data.popleft()]
-        self.halfmoon = [data.popleft(), data.popleft()]
-
-
-class EV_UNITSENSSTATUS_1(EV_UNITSENSSTATUS_0):
-    offset: list
-    swing: list
-    workingMode: int
-    fanSpeed: int
-    swingMode: int
-
-    def __init__(self, data) -> None:
-        super().__init__(data)
-        self.offset = [data.popleft(), data.popleft()]
-        self.swing = [data.popleft(), data.popleft()]
-        self.workingMode = data.popleft()
-        self.fanSpeed = data.popleft()
-        self.swingMode = data.popleft()
-
-
 @final
 @unique
 class SwitchStatus(Enum):
@@ -301,3 +261,117 @@ class EV_UNITDUOSWITCHSTATUS_0(BaseNodeUnitMessage):
         data.popleft()
         self.state = data.popleft()
         self.stateName = DuoswitchStatus(self.state).name
+
+
+@final
+@unique
+class SensType(Enum):
+    TEMPERATURE = 0
+    PH = 1
+    LUX = 2
+    AMPERE = 3
+
+
+@final
+@unique
+class SensControl(Enum):
+    OFF = 0
+    ON = 1
+
+
+@final
+@unique
+class SensState(Enum):
+    IDLE = 0
+    HEATING = 1
+    COOLING = 2
+
+
+@final
+@unique
+class SensPreset(Enum):
+    SUN = 0
+    HALF_SUN = 1
+    MOON = 2
+    HALF_MOON = 3
+
+
+@final
+@unique
+class SensWorkingmode(Enum):
+    AUTO = 0
+    HEATING = 1
+    COOLING = 2
+    DRY = 3
+    FAN = 4
+    UNKNOWN = 255
+
+
+@final
+@unique
+class SensFanspeed(Enum):
+    SPEED1 = 0
+    SPEED2 = 1
+    SPEED3 = 2
+    SPEED4 = 3
+    SPEED5 = 4
+    AUTO = 255
+
+
+def sens_calc_value(msb: int, lsb: int):
+    val = (256 * msb) + lsb
+    return val / 10
+
+
+class EV_UNITSENSSTATUS_0(BaseNodeUnitMessage):
+    config: int
+    configName: SensType
+    controlState: int
+    controlStateName: SensControl
+    state: int
+    stateName: SensState
+    preset: int
+    presetName: SensPreset
+    value: list
+    sun: list
+    halfsun: list
+    moon: list
+    halfmoon: list
+
+    def __init__(self, data) -> None:
+        super().__init__(data)
+        self.config = data.popleft()
+        self.configName = SensType(self.config).name
+        self.controlState = data.popleft()
+        self.controlStateName = SensControl(self.controlState).name
+        self.state = data.popleft()
+        self.stateName = SensState(self.state).name
+        self.preset = data.popleft()
+        self.presetName = SensPreset(self.preset).name
+        self.value = sens_calc_value(data.popleft(), data.popleft())
+        self.sun = sens_calc_value(data.popleft(), data.popleft())
+        self.halfsun = sens_calc_value(data.popleft(), data.popleft())
+        self.moon = sens_calc_value(data.popleft(), data.popleft())
+        self.halfmoon = sens_calc_value(data.popleft(), data.popleft())
+
+
+class EV_UNITSENSSTATUS_1(EV_UNITSENSSTATUS_0):
+    offset: list
+    swing: list
+    workingMode: int
+    workingModeName: SensWorkingmode
+    fanSpeed: int
+    fanSpeedName: SensFanspeed
+    swingMode: int
+    swingModeName: SensControl
+
+    def __init__(self, data) -> None:
+        super().__init__(data)
+        self.offset = sens_calc_value(data.popleft(), data.popleft())
+        self.swing = sens_calc_value(data.popleft(), data.popleft())
+        self.workingMode = data.popleft()
+        self.workingModeName = SensWorkingmode(self.workingMode).name
+        self.fanSpeed = data.popleft()
+        self.fanSpeedName = SensFanspeed(self.fanSpeed).name
+        self.swingMode = data.popleft()
+        self.swingModeName = SensControl(self.swingMode).name

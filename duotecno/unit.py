@@ -5,6 +5,7 @@ from duotecno.protocol import (
     EV_UNITDIMSTATUS_0,
     EV_UNITSWITCHSTATUS_0,
     EV_UNITSENSSTATUS_0,
+    EV_UNITSENSSTATUS_1,
 )
 
 
@@ -77,7 +78,9 @@ class SensUnit(BaseUnit):
     _preset: int
 
     async def handlePacket(self, packet) -> None:
-        if isinstance(packet, EV_UNITSENSSTATUS_0):
+        if isinstance(packet, EV_UNITSENSSTATUS_0) or isinstance(
+            packet, EV_UNITSENSSTATUS_1
+        ):
             await self._update(
                 {"state": packet.state, "value": packet.value, "preset": packet.preset}
             )
