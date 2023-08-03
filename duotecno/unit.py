@@ -187,16 +187,16 @@ class DuoswitchUnit(BaseUnit):
     async def open(self):
         """Move up."""
         await self.stop()
-        await self.writer(f"[182,0,{self.node.address},{self.unit},4]")
+        await self.writer(f"[182,4,{self.node.address},{self.unit}]")
 
     async def close(self):
         """Move down."""
         await self.stop()
-        await self.writer(f"[182,0,{self.node.address},{self.unit},5]")
+        await self.writer(f"[182,5,{self.node.address},{self.unit}]")
 
     async def stop(self):
         """Stop the motor."""
-        await self.writer(f"[182,0,{self.node.address},{self.unit},3]")
+        await self.writer(f"[182,3,{self.node.address},{self.unit}]")
 
 
 class VirtualUnit(BaseUnit):
