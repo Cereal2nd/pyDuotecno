@@ -34,6 +34,14 @@ class PyDuotecno:
                 res.append(unit)
         return res
 
+    async def disconnect(self) -> None:
+        self._log.debug("Disconnecting")
+        self.connectionOK.clear()
+        if self.reader:
+            self.reader.close()
+        if self.writer:
+            self.writer.close()
+
     async def connect(self, host, port, password, testOnly=False) -> None:
         """Initialize the connection."""
         self.nodes = {}
@@ -57,9 +65,10 @@ class PyDuotecno:
         await self.write(f"[214,3,{len(passw)},{','.join(passw)}]")
         # wait for the login to be ok
         try:
-            await asyncio.wait_for(self.loginOK.wait(), timeout=1.0)
+            await asyncio.wait_for(self.loginOK.wait(), timeout=5.0)
             await self.loginOK.wait()
         except TimeoutError:
+            self.disconnect()
             raise InvalidPassword()
         # if we are not testing the connection, start scanning
         if not testOnly:
@@ -73,8 +82,7 @@ class PyDuotecno:
     async def write(self, msg) -> None:
         """Send a message."""
         if self.writer.transport._conn_lost:
-            self.connectionOK.clear()
-            self._log("ERROR CONNECTION LOST")
+            self.disconnect()
             return
         self._log.debug(f"Send: {msg}")
         msg = f"{msg}{chr(10)}"
@@ -98,22 +106,23 @@ class PyDuotecno:
         while self.connectionOK.is_set():
             tmp = await self.reader.readline()
             tmp = tmp.decode().rstrip()
+            self._log.debug(f'Raw Receive: "{tmp}"')
             if not tmp.startswith("["):
                 tmp = tmp.lstrip("[")
             tmp = tmp.replace("\x00", "")
-            self._log.debug(f"Receive: {tmp}")
+            self._log.debug(f'Receive: "{tmp}"')
             tmp = tmp[1:-1]
+            self._log.debug(f'Receive: "{tmp}"')
             p = tmp.split(",")
             try:
                 pc = Packet(int(p[0]), int(p[1]), [int(_i) for _i in p[2:]])
+                await self._handlePacket(pc)
             except Exception as e:
                 self._log.error(e)
                 self._log.error(tmp)
-            await self._handlePacket(pc)
             if not self.loginOK.is_set():
                 self._log.error("Login failed")
                 self.connectionOK.clear()
-        self._log.error("ERROR CONNECTION LOST")
 
     async def _handlePacket(self, packet):
         if isinstance(packet.cls, EV_CLIENTCONNECTSET_3):
@@ -121,7 +130,7 @@ class PyDuotecno:
                 self.loginOK.set()
                 return
         if isinstance(packet.cls, EV_NODEDATABASEINFO_0):
-            for i in range(packet.cls.numNode - 1):
+            for i in range(packet.cls.numNode):
                 await self.write(f"[209,1,{i}]")
             return
         if isinstance(packet.cls, EV_NODEDATABASEINFO_1):
