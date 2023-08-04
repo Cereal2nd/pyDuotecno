@@ -19,7 +19,12 @@ parser.add_argument("--port", help="The port to connect to")
 parser.add_argument("--password", help="The password")
 args = parser.parse_args()
 
-logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+logging.basicConfig(
+    stream=sys.stdout,
+    level=logging.DEBUG,
+    format="%(asctime)s %(levelname)-8s %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 logging.getLogger("asyncio").setLevel(logging.DEBUG)
 
 asyncio.run(test(args.host, args.port, args.password))
