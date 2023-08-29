@@ -8,6 +8,7 @@ from duotecno.protocol import (
     EV_UNITSENSSTATUS_1,
     EV_UNITCONTROLSTATUS_0,
     EV_UNITMACROCOMMAND_0,
+    calc_value,
 )
 
 
@@ -76,21 +77,80 @@ class BaseUnit:
 class SensUnit(BaseUnit):
     _unitType: final = 4
     _state: int
-    _value: int
+    _mode: int
     _preset: int
+    _cur_temp: float
+    _setp_sun: float
+    _setp_hsun: float
+    _setp_moon: float
+    _setp_hmoon: float
+    _offset: float
+    _swing_angle: float
+    _woking_mode: float
+    _fan_speed: float
+    _swing_mode: float
 
     async def handlePacket(self, packet) -> None:
         if isinstance(packet, EV_UNITSENSSTATUS_0) or isinstance(
             packet, EV_UNITSENSSTATUS_1
         ):
-            await self._update(
-                {"state": packet.state, "value": packet.value, "preset": packet.preset}
-            )
+            tmp = {}
+            tmp["state"] = packet.config
+            tmp["mode"] = packet.state
+            tmp["preset"] = packet.preset
+            tmp["cur_temp"] = packet.value
+            tmp["setp_sun"] = packet.sun
+            tmp["setp_hsun"] = packet.halfsun
+            tmp["setp_moon"] = packet.moon
+            tmp["setp_hmoon"] = packet.halfmoon
+            if isinstance(packet, EV_UNITSENSSTATUS_1):
+                tmp["offset"] = packet.offset
+                tmp["swing_angle"] = packet.swingMode
+                tmp["working_mode"] = packet.workingMode
+                tmp["fan_speed"] = packet.fanSpeed
+                tmp["swing_mode"] = packet.swingMode
+            await self._update(tmp)
             return
         if isinstance(packet, EV_UNITMACROCOMMAND_0):
-            # TODO
+            if packet.event == 9:
+                await self._update({"state": packet.state})
+            elif packet.event == 10:
+                await self._update({"mode": packet.state})
+            # TODO event 11
+            elif packet.event == 12:
+                await self._update({"working_mode": packet.state})
+            elif packet.event == 13:
+                await self._update({"fan_speed": packet.state})
+            # TODO event 14
+            elif packet.event == 15:
+                await self._update({"Swing_mode": packet.state})
             return
         await super().handlePacket(packet)
+
+    async def requestStatus(self) -> None:
+        await self.writer(f"[137,16,{self.node.address},{self.unit}]")
+        await self.writer(f"[137,17,{self.node.address},{self.unit}]")
+        await self.writer(f"[137,18,{self.node.address},{self.unit}]")
+        await self.writer(f"[137,19,{self.node.address},{self.unit}]")
+        await super().requestStatus()
+
+    async def set_state(self, state) -> None:
+        pass
+
+    async def set_preset(self, preset) -> None:
+        pass
+
+    async def set_temp(self, temp) -> None:
+        pass
+
+    def get_state(self) -> int:
+        return self._state
+
+    def get_cur_temp(self) -> float:
+        return self._cur_temp
+
+    def get_preset(self) -> int:
+        return self._preset
 
 
 class DimUnit(BaseUnit):
@@ -101,6 +161,12 @@ class DimUnit(BaseUnit):
     async def handlePacket(self, packet) -> None:
         if isinstance(packet, EV_UNITDIMSTATUS_0):
             await self._update({"state": packet.state, "value": packet.dimValue})
+            return
+        if isinstance(packet, EV_UNITMACROCOMMAND_0):
+            if packet.event == 6:
+                await self._update({"state": packet.state})
+            elif packet.state == 8:
+                await self._update({"value": calc_value(packet.code1, packet.code2)})
             return
         await super().handlePacket(packet)
 
@@ -137,13 +203,9 @@ class SwitchUnit(BaseUnit):
         if isinstance(packet, EV_UNITMACROCOMMAND_0):
             if packet.event == 5:
                 # pir timed
-                self._update({"state": 2})
-            elif packet.state == 0:
-                # OFF
-                self._update({"state": 0})
+                await self._update({"state": 2})
             else:
-                # on
-                self._update({"state": 1})
+                await self._update({"state": packet.state})
             return
         await super().handlePacket(packet)
 

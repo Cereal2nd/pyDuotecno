@@ -89,6 +89,10 @@ class Packet:
             self.cls = None
 
 
+def calc_value(msb: int, lsb: int) -> int:
+    return (256 * msb) + lsb
+
+
 class BaseMessage:
     def __init__(self, data) -> None:
         pass
@@ -339,8 +343,7 @@ class SensFanspeed(Enum):
 
 
 def sens_calc_value(msb: int, lsb: int) -> float:
-    val = (256 * msb) + lsb
-    return val / 10
+    return calc_value(msb, lsb) / 10
 
 
 class EV_UNITSENSSTATUS_0(BaseNodeUnitTypeMessage):

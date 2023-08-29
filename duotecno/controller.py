@@ -106,11 +106,11 @@ class PyDuotecno:
         while self.connectionOK.is_set():
             tmp = await self.reader.readline()
             tmp = tmp.decode().rstrip()
-            self._log.debug(f'Raw Receive: "{tmp}"')
+            # self._log.debug(f'Raw Receive: "{tmp}"')
             if not tmp.startswith("["):
                 tmp = tmp.lstrip("[")
             tmp = tmp.replace("\x00", "")
-            self._log.debug(f'Receive: "{tmp}"')
+            # self._log.debug(f'Receive: "{tmp}"')
             tmp = tmp[1:-1]
             self._log.debug(f'Receive: "{tmp}"')
             p = tmp.split(",")
