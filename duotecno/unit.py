@@ -77,7 +77,6 @@ class BaseUnit:
 class SensUnit(BaseUnit):
     _unitType: final = 4
     _state: int
-    _mode: int
     _preset: int
     _cur_temp: float
     _setp_sun: float
@@ -95,8 +94,10 @@ class SensUnit(BaseUnit):
             packet, EV_UNITSENSSTATUS_1
         ):
             tmp = {}
-            tmp["state"] = packet.config
-            tmp["mode"] = packet.state
+            if packet.controlState == 0:
+                tmp["state"] = 0
+            else:
+                tmp["state"] = packet.state
             tmp["preset"] = packet.preset
             tmp["cur_temp"] = packet.value
             tmp["setp_sun"] = packet.sun
@@ -134,13 +135,11 @@ class SensUnit(BaseUnit):
         await self.writer(f"[137,19,{self.node.address},{self.unit}]")
         await super().requestStatus()
 
-    async def set_state(self, state) -> None:
-        pass
+    async def set_preset(self, preset: str) -> None:
+        await self.writer(f"[136,13,{self.node.address},{self.unit},{preset}]")
 
-    async def set_preset(self, preset) -> None:
-        pass
-
-    async def set_temp(self, temp) -> None:
+    async def set_temp(self, temp: float) -> None:
+        print(f"SET TEMP !!! {temp}")
         pass
 
     def get_state(self) -> int:
@@ -148,6 +147,16 @@ class SensUnit(BaseUnit):
 
     def get_cur_temp(self) -> float:
         return self._cur_temp
+
+    def get_target_temp(self) -> float:
+        if self._preset == 0:
+            return self._setp_sun
+        elif self._preset == 1:
+            return self._setp_hsun
+        elif self._preset == 2:
+            return self._setp_moon
+        else:
+            return self._setp_hmoon
 
     def get_preset(self) -> int:
         return self._preset
