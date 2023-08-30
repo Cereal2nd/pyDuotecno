@@ -139,8 +139,12 @@ class SensUnit(BaseUnit):
         await self.writer(f"[136,13,{self.node.address},{self.unit},{preset}]")
 
     async def set_temp(self, temp: float) -> None:
-        print(f"SET TEMP !!! {temp}")
-        pass
+        msb, lsb = divmod(temp * 10, 256)
+        msb = int(msb)
+        lsb = int(lsb)
+        await self.writer(
+            f"[136,1,{self.node.address},{self.unit},{self._preset},{msb},{lsb}]"
+        )
 
     def get_state(self) -> int:
         return self._state
