@@ -68,7 +68,7 @@ class Node:
 
     async def load(self) -> None:
         self._log.debug(f"Node {self.name}: Requesting units")
-        for i in range(self.numUnits - 1):
+        for i in range(self.numUnits):
             await self.writer(f"[209,2,{self.address},{i}]")
 
     async def handlePacket(self, packet) -> None:
