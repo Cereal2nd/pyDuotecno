@@ -60,6 +60,11 @@ class MsgType(Enum):
     FC_ACCESSLEVELSET = 222
     FC_VIDEOPHONESET = 223
     FC_REGISTERMAP = 224
+    UNKNOWN = 255
+
+    @classmethod
+    def _missing_(cls, value):
+        return cls.UNKNOWN
 
 
 @dataclass
@@ -172,6 +177,11 @@ class NodeType(Enum):
     Gateway = 4
     Modem = 8
     Gui = 32
+    UNKNOWN = 255
+
+    @classmethod
+    def _missing_(cls, value):
+        return cls.UNKNOWN
 
 
 class EV_NODEDATABASEINFO_1(BaseMessage):
@@ -208,6 +218,11 @@ class UnitType(Enum):
     AVMATRIC = 11
     IRTX = 12
     VIDEOMUX = 14
+    UNKNOWN = 255
+
+    @classmethod
+    def _missing_(cls, value):
+        return cls.UNKNOWN
 
 
 class EV_NODEDATABASEINFO_2(BaseMessage):

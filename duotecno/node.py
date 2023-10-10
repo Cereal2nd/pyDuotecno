@@ -93,7 +93,7 @@ class Node:
                     self, name=packet.unitName, unit=packet.unit, writer=self.writer
                 )
                 await self.units[packet.unit].requestStatus()
-            if len(self.units) == self.numUnits - 1:
+            if len(self.units) == self.numUnits:
                 self.isLoaded.set()
             return
         if hasattr(packet, "unit") and packet.unit in self.units:
