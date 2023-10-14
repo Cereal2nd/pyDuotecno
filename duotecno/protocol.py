@@ -358,7 +358,10 @@ class SensFanspeed(Enum):
 
 
 def sens_calc_value(msb: int, lsb: int) -> float:
-    return calc_value(msb, lsb) / 10
+    val = calc_value(msb, lsb)
+    if (val & (1 << 15)) != 0:
+        val = val - (1 << 16)
+    return val / 10
 
 
 class EV_UNITSENSSTATUS_0(BaseNodeUnitTypeMessage):
