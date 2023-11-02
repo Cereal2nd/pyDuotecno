@@ -136,6 +136,14 @@ class SensUnit(BaseUnit):
         await super().requestStatus()
 
     async def set_preset(self, preset: str) -> None:
+        if preset == 255:
+            # we switch the unit off
+            await self.writer(f"[136,3,{self.node.address},{self.unit},0]")
+            return
+        if self._state == 0:
+            # we want to go to a certain preset, but the unit is off
+            await self.writer(f"[136,3,{self.node.address},{self.unit},1]")
+        # set the preset
         await self.writer(f"[136,13,{self.node.address},{self.unit},{preset}]")
 
     async def set_temp(self, temp: float) -> None:
