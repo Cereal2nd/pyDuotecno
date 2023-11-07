@@ -1,4 +1,5 @@
-from typing import final, Awaitable, Callable
+from __future__ import annotations
+from typing import Awaitable, Callable, TYPE_CHECKING
 import logging
 from duotecno.protocol import (
     EV_UNITDUOSWITCHSTATUS_0,
@@ -11,19 +12,23 @@ from duotecno.protocol import (
     calc_value,
 )
 
+if TYPE_CHECKING:
+    from duotecno.node import Node
+    from duotecno.protocol import BaseMessage
+
 
 class BaseUnit:
-    _unitType: final = None
-    _on_status_update: list = []
+    _unitType: int = 0
+    _on_status_update: list[Callable[[], Awaitable[None]]] = []
     name: str
     unit: int
 
     def __init__(
         self,
-        node,
+        node: Node,
         name: str,
         unit: int,
-        writer,
+        writer: Callable[[str], Awaitable[None]],
     ) -> None:
         self._log = logging.getLogger("pyduotecno-unit")
         self.node = node
@@ -34,7 +39,7 @@ class BaseUnit:
             f"New Unit: '{self.node.name}' => '{self.name}' = {type(self).__name__}"
         )
 
-    def get_node_address(self) -> str:
+    def get_node_address(self) -> int:
         return self.node.get_address()
 
     def get_node_name(self) -> str:
@@ -56,7 +61,7 @@ class BaseUnit:
                 items.append(f"{k} = {v!r}")
         return "{}[{}]".format(type(self), ", ".join(items))
 
-    async def handlePacket(self, packet) -> None:
+    async def handlePacket(self, packet: BaseMessage) -> None:
         self._log.debug(f"Unhandled unit packet: {packet}")
 
     async def requestStatus(self) -> None:
@@ -65,7 +70,7 @@ class BaseUnit:
                 f"[209,3,{self.node.address},{self.unit},{self._unitType}]"
             )
 
-    async def _update(self, data: dict) -> None:
+    async def _update(self, data: dict[str, str | int | float]) -> None:
         for key, new_val in data.items():
             cur_val = getattr(self, f"_{key}", None)
             if cur_val is None or cur_val != new_val:
@@ -75,7 +80,7 @@ class BaseUnit:
 
 
 class SensUnit(BaseUnit):
-    _unitType: final = 4
+    _unitType: int = 4
     _state: int
     _preset: int
     _cur_temp: float
@@ -89,11 +94,11 @@ class SensUnit(BaseUnit):
     _fan_speed: float
     _swing_mode: float
 
-    async def handlePacket(self, packet) -> None:
+    async def handlePacket(self, packet: BaseMessage) -> None:
         if isinstance(packet, EV_UNITSENSSTATUS_0) or isinstance(
             packet, EV_UNITSENSSTATUS_1
         ):
-            tmp = {}
+            tmp: dict[str, str | int | float] = {}
             if packet.controlState == 0:
                 tmp["state"] = 0
             else:
@@ -136,15 +141,13 @@ class SensUnit(BaseUnit):
         await super().requestStatus()
 
     async def set_preset(self, preset: str) -> None:
-        if preset == 255:
-            # we switch the unit off
-            await self.writer(f"[136,3,{self.node.address},{self.unit},0]")
-            return
-        if self._state == 0:
-            # we want to go to a certain preset, but the unit is off
-            await self.writer(f"[136,3,{self.node.address},{self.unit},1]")
-        # set the preset
         await self.writer(f"[136,13,{self.node.address},{self.unit},{preset}]")
+
+    async def turn_off(self) -> None:
+        await self.writer(f"[136,3,{self.node.address},{self.unit},0]")
+
+    async def turn_on(self) -> None:
+        await self.writer(f"[136,3,{self.node.address},{self.unit},1]")
 
     async def set_temp(self, temp: float) -> None:
         msb, lsb = divmod(temp * 10, 256)
@@ -175,11 +178,11 @@ class SensUnit(BaseUnit):
 
 
 class DimUnit(BaseUnit):
-    _unitType: final = 1
+    _unitType: int = 1
     _state: int
     _value: int
 
-    async def handlePacket(self, packet) -> None:
+    async def handlePacket(self, packet: BaseMessage) -> None:
         if isinstance(packet, EV_UNITDIMSTATUS_0):
             await self._update({"state": packet.state, "value": packet.dimValue})
             return
@@ -214,10 +217,10 @@ class DimUnit(BaseUnit):
 
 
 class SwitchUnit(BaseUnit):
-    _unitType: final = 2
-    _state: int = None
+    _unitType: int = 2
+    _state: int
 
-    async def handlePacket(self, packet) -> None:
+    async def handlePacket(self, packet: BaseMessage) -> None:
         if isinstance(packet, EV_UNITSWITCHSTATUS_0):
             await self._update({"state": packet.state})
             return
@@ -230,63 +233,63 @@ class SwitchUnit(BaseUnit):
             return
         await super().handlePacket(packet)
 
-    def is_on(self):
+    def is_on(self) -> int:
         return self._state
 
-    async def turn_on(self):
+    async def turn_on(self) -> None:
         """Switch on."""
         await self.writer(f"[163,3,{self.node.address},{self.unit}]")
 
-    async def turn_off(self):
+    async def turn_off(self) -> None:
         """Switch off."""
         await self.writer(f"[163,2,{self.node.address},{self.unit}]")
 
 
 class DuoswitchUnit(BaseUnit):
-    _unitType: final = 8
+    _unitType: int = 8
     _state: int
 
-    async def handlePacket(self, packet) -> None:
+    async def handlePacket(self, packet: BaseMessage) -> None:
         if isinstance(packet, EV_UNITDUOSWITCHSTATUS_0):
             await self._update({"state": packet.state})
             return
         await super().handlePacket(packet)
 
-    def is_opening(self):
+    def is_opening(self) -> bool:
         if self._state == 4:
             return True
         return False
 
-    def is_closing(self):
+    def is_closing(self) -> bool:
         if self._state == 3:
             return True
         return False
 
-    def is_closed(self):
+    def is_closed(self) -> bool:
         if self._state == 1:
             return True
         return False
 
-    async def open(self):
+    async def open(self) -> None:
         """Move up."""
         await self.stop()
         await self.writer(f"[182,4,{self.node.address},{self.unit}]")
 
-    async def close(self):
+    async def close(self) -> None:
         """Move down."""
         await self.stop()
         await self.writer(f"[182,5,{self.node.address},{self.unit}]")
 
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop the motor."""
         await self.writer(f"[182,3,{self.node.address},{self.unit}]")
 
 
 class VirtualUnit(BaseUnit):
-    _unitType: final = 7
+    _unitType: int = 7
     _status: int
 
-    async def handlePacket(self, packet) -> None:
+    async def handlePacket(self, packet: BaseMessage) -> None:
         if isinstance(packet, EV_UNITCONTROLSTATUS_0):
             await self._update({"status": packet.status})
             return
@@ -295,10 +298,10 @@ class VirtualUnit(BaseUnit):
             return
         await super().handlePacket(packet)
 
-    def is_on(self):
+    def is_on(self) -> int:
         return self._status
 
 
 class ControlUnit(VirtualUnit):
-    _unitType: final = 3
+    _unitType: int = 3
     pass

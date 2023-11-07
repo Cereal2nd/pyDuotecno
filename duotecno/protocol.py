@@ -1,4 +1,5 @@
-from typing import final
+from __future__ import annotations
+from typing import final, Deque
 from enum import Enum, unique
 from dataclasses import dataclass, field
 import collections
@@ -63,7 +64,7 @@ class MsgType(Enum):
     UNKNOWN = 255
 
     @classmethod
-    def _missing_(cls, value):
+    def _missing_(cls, value: object) -> MsgType:
         return cls.UNKNOWN
 
 
@@ -74,10 +75,10 @@ class Packet:
     cmdName: str = field(init=False)
     cmdCode: int = field(repr=False)
     method: int
-    data: collections.deque
-    cls: type = field(init=False)
+    data: Deque[int]
+    cls: BaseMessage | None = field(init=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """fill in the command name, make the subsclass."""
         try:
             self.cmdName = MsgType(self.cmdCode).name
@@ -99,13 +100,13 @@ def calc_value(msb: int, lsb: int) -> int:
 
 
 class BaseMessage:
-    def __init__(self, data) -> None:
+    def __init__(self, data: Deque[int]) -> None:
         pass
 
     def to_json(self) -> str:
         return json.dumps(self.to_json_basic())
 
-    def to_json_basic(self) -> dict:
+    def to_json_basic(self) -> dict[str, str]:
         """
         Create JSON structure with generic attributes
         """
@@ -115,8 +116,12 @@ class BaseMessage:
         for key in me.copy():
             if key == "name":
                 continue
+            if isinstance(me[key], str):
+                continue
             if callable(getattr(self, key)) or key.startswith("__"):
                 del me[key]
+            if isinstance(me[key], Enum):
+                me[key] = me[key].name
             if isinstance(me[key], (bytes, bytearray)):
                 me[key] = str(me[key], "utf-8")
         return me
@@ -129,7 +134,7 @@ class BaseNodeUnitMessage(BaseMessage):
     address: int
     unit: int
 
-    def __init__(self, data):
+    def __init__(self, data: Deque[int]) -> None:
         super().__init__(data)
         self.address = data.popleft()
         self.unit = data.popleft()
@@ -138,7 +143,7 @@ class BaseNodeUnitMessage(BaseMessage):
 class BaseNodeUnitTypeMessage(BaseNodeUnitMessage):
     unitType: int
 
-    def __init__(self, data):
+    def __init__(self, data: Deque[int]) -> None:
         super().__init__(data)
         self.unitType = data.popleft()
 
@@ -146,14 +151,14 @@ class BaseNodeUnitTypeMessage(BaseNodeUnitMessage):
 class EV_CLIENTCONNECTSET_3(BaseMessage):
     loginOk: bool
 
-    def __init__(self, data):
+    def __init__(self, data: Deque[int]) -> None:
         self.loginOK = data.popleft()
 
 
 class EV_NODEDATABASEINFO_0(BaseMessage):
     numNode: int
 
-    def __init__(self, data):
+    def __init__(self, data: Deque[int]) -> None:
         self.numNode = data.popleft()
 
 
@@ -163,7 +168,7 @@ class EV_UNITMACROCOMMAND_0(BaseNodeUnitMessage):
     code1: int
     code2: int
 
-    def __init__(self, data):
+    def __init__(self, data: Deque[int]) -> None:
         super().__init__(data)
         self.event = data.popleft()
         self.state = data.popleft()
@@ -180,7 +185,7 @@ class NodeType(Enum):
     UNKNOWN = 255
 
     @classmethod
-    def _missing_(cls, value):
+    def _missing_(cls, value: object) -> NodeType:
         return cls.UNKNOWN
 
 
@@ -189,18 +194,18 @@ class EV_NODEDATABASEINFO_1(BaseMessage):
     address: int
     nodeName: str
     numUnits: int
-    nodeType: int
-    nodeTypeName: NodeType
+    nodeType: NodeType
+    nodeTypeName: str
     flags: int
 
-    def __init__(self, data):
+    def __init__(self, data: Deque[int]) -> None:
         self.index = data.popleft()
         self.address = data.popleft()
         # next 4 are no needed
         [data.popleft() for _i in range(4)]
         self.nodeName = "".join([chr(data.popleft()) for _i in range(data.popleft())])
         self.numUnits = data.popleft()
-        self.nodeType = data.popleft()
+        self.nodeType = NodeType(data.popleft())
         self.nodeTypeName = NodeType(self.nodeType).name
         self.flags = data.popleft()
 
@@ -221,7 +226,7 @@ class UnitType(Enum):
     UNKNOWN = 255
 
     @classmethod
-    def _missing_(cls, value):
+    def _missing_(cls, value: object) -> UnitType:
         return cls.UNKNOWN
 
 
@@ -232,10 +237,10 @@ class EV_NODEDATABASEINFO_2(BaseMessage):
     lunit: int
     unitName: str
     unitType: int
-    unitTypeName: UnitType
+    unitTypeName: str
     unitFlags: int
 
-    def __init__(self, data):
+    def __init__(self, data: Deque[int]) -> None:
         self.address = data.popleft()
         self.unit = data.popleft()
         self.laddress = data.popleft()
@@ -256,9 +261,9 @@ class SwitchStatus(Enum):
 
 class EV_UNITSWITCHSTATUS_0(BaseNodeUnitTypeMessage):
     state: int
-    stateName: SwitchStatus
+    stateName: str
 
-    def __init__(self, data) -> None:
+    def __init__(self, data: Deque[int]) -> None:
         super().__init__(data)
         # config, reserved
         data.popleft()
@@ -268,10 +273,10 @@ class EV_UNITSWITCHSTATUS_0(BaseNodeUnitTypeMessage):
 
 class EV_UNITDIMSTATUS_0(BaseNodeUnitTypeMessage):
     state: int
-    stateName: SwitchStatus
+    stateName: str
     dimValue: int
 
-    def __init__(self, data) -> None:
+    def __init__(self, data: Deque[int]) -> None:
         super().__init__(data)
         # config, reserved
         data.popleft()
@@ -292,9 +297,9 @@ class DuoswitchStatus(Enum):
 
 class EV_UNITDUOSWITCHSTATUS_0(BaseNodeUnitTypeMessage):
     state: int
-    stateName: DuoswitchStatus
+    stateName: str
 
-    def __init__(self, data) -> None:
+    def __init__(self, data: Deque[int]) -> None:
         super().__init__(data)
         # config, reserved
         data.popleft()
@@ -366,20 +371,20 @@ def sens_calc_value(msb: int, lsb: int) -> float:
 
 class EV_UNITSENSSTATUS_0(BaseNodeUnitTypeMessage):
     config: int
-    configName: SensType
+    configName: str
     controlState: int
-    controlStateName: SensControl
+    controlStateName: str
     state: int
-    stateName: SensState
+    stateName: str
     preset: int
-    presetName: SensPreset
+    presetName: str
     value: float
     sun: float
     halfsun: float
     moon: float
     halfmoon: float
 
-    def __init__(self, data) -> None:
+    def __init__(self, data: Deque[int]) -> None:
         super().__init__(data)
         self.config = data.popleft()
         self.configName = SensType(self.config).name
@@ -400,13 +405,13 @@ class EV_UNITSENSSTATUS_1(EV_UNITSENSSTATUS_0):
     offset: float
     swing: float
     workingMode: int
-    workingModeName: SensWorkingmode
+    workingModeName: str
     fanSpeed: int
-    fanSpeedName: SensFanspeed
+    fanSpeedName: str
     swingMode: int
-    swingModeName: SensControl
+    swingModeName: str
 
-    def __init__(self, data) -> None:
+    def __init__(self, data: Deque[int]) -> None:
         super().__init__(data)
         self.offset = sens_calc_value(data.popleft(), data.popleft())
         self.swing = sens_calc_value(data.popleft(), data.popleft())
@@ -427,9 +432,9 @@ class ControLStatus(Enum):
 
 class EV_UNITCONTROLSTATUS_0(BaseNodeUnitTypeMessage):
     status: int
-    statusName: ControLStatus
+    statusName: str
 
-    def __init__(self, data) -> None:
+    def __init__(self, data: Deque[int]) -> None:
         super().__init__(data)
         # config ignore
         data.popleft()

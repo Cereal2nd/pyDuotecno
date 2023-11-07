@@ -1,7 +1,9 @@
+from __future__ import annotations
+from typing import Callable, Awaitable
 import asyncio
 import logging
 
-from duotecno.protocol import NodeType, EV_NODEDATABASEINFO_2
+from duotecno.protocol import NodeType, EV_NODEDATABASEINFO_2, BaseMessage
 from duotecno.unit import (
     BaseUnit,
     SwitchUnit,
@@ -19,7 +21,7 @@ class Node:
     nodeType: NodeType
     address: int
     numUnits: int
-    units: dict
+    units: dict[int, BaseUnit]
     isloaded: asyncio.Event
 
     def __init__(
@@ -29,7 +31,7 @@ class Node:
         index: int,
         nodeType: NodeType,
         numUnits: int,
-        writer,
+        writer: Callable[[str], Awaitable[None]],
     ) -> None:
         self._log = logging.getLogger("pyduotecno-node")
         self.name = name
@@ -46,7 +48,7 @@ class Node:
     def get_name(self) -> str:
         return self.name
 
-    def get_address(self) -> str:
+    def get_address(self) -> int:
         return self.address
 
     def __repr__(self) -> str:
@@ -56,7 +58,7 @@ class Node:
                 items.append(f"{k} = {v!r}")
         return "{}[{}]".format(type(self), ", ".join(items))
 
-    def get_unit_by_type(self, unit_type: list | str):
+    def get_unit_by_type(self, unit_type: list[str] | str) -> list[BaseUnit]:
         if isinstance(unit_type, str):
             unit_type = [unit_type]
         res = []
@@ -71,7 +73,7 @@ class Node:
         for i in range(self.numUnits):
             await self.writer(f"[209,2,{self.address},{i}]")
 
-    async def handlePacket(self, packet) -> None:
+    async def handlePacket(self, packet: BaseMessage) -> None:
         if isinstance(packet, EV_NODEDATABASEINFO_2):
             if packet.unit not in self.units:
                 u = BaseUnit

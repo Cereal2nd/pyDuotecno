@@ -1,7 +1,8 @@
 """Main interface to the duotecno bus."""
-
+from __future__ import annotations
 import asyncio
 import logging
+from collections import deque
 from duotecno.exceptions import LoadFailure, InvalidPassword
 from duotecno.protocol import (
     Packet,
@@ -10,6 +11,7 @@ from duotecno.protocol import (
     EV_NODEDATABASEINFO_1,
 )
 from duotecno.node import Node
+from duotecno.unit import BaseUnit
 
 
 class PyDuotecno:
@@ -20,14 +22,14 @@ class PyDuotecno:
     - open and close the connection
     """
 
-    writer: asyncio.StreamWriter = None
-    reader: asyncio.StreamReader = None
-    readerTask: asyncio.Task
+    writer: asyncio.StreamWriter | None = None
+    reader: asyncio.StreamReader | None = None
+    readerTask: asyncio.Task[None]
     loginOK: asyncio.Event
     connectionOK: asyncio.Event
-    nodes: dict = {}
+    nodes: dict[int, Node] = {}
 
-    def get_units(self, unit_type: list | str) -> list:
+    def get_units(self, unit_type: list[str] | str) -> list[BaseUnit]:
         res = []
         for node in self.nodes.values():
             for unit in node.get_unit_by_type(unit_type):
@@ -37,19 +39,19 @@ class PyDuotecno:
     async def disconnect(self) -> None:
         self._log.debug("Disconnecting")
         self.connectionOK.clear()
-        if self.reader:
-            self.reader.close()
         if self.writer:
             self.writer.close()
 
-    async def connect(self, host, port, password, testOnly=False) -> None:
+    async def connect(
+        self, host: str, port: int, password: str, testOnly: bool = False
+    ) -> None:
         """Initialize the connection."""
         self.nodes = {}
         self._log = logging.getLogger("pyduotecno")
         # try to connect
         try:
             self.reader, self.writer = await asyncio.open_connection(host, port)
-        except ConnectionError or TimeoutError:
+        except (ConnectionError, TimeoutError):
             raise
         # events
         self.connectionOK = asyncio.Event()
@@ -68,7 +70,7 @@ class PyDuotecno:
             await asyncio.wait_for(self.loginOK.wait(), timeout=5.0)
             await self.loginOK.wait()
         except TimeoutError:
-            self.disconnect()
+            await self.disconnect()
             raise InvalidPassword()
         # if we are not testing the connection, start scanning
         if not testOnly:
@@ -79,17 +81,19 @@ class PyDuotecno:
                 raise LoadFailure()
             self._log.info("Loading finished")
 
-    async def write(self, msg) -> None:
+    async def write(self, msg: str) -> None:
         """Send a message."""
-        if self.writer.transport._conn_lost:
-            self.disconnect()
+        if not self.writer:
+            return
+        if self.writer.transport.is_closing():
+            await self.disconnect()
             return
         self._log.debug(f"Send: {msg}")
         msg = f"{msg}{chr(10)}"
         self.writer.write(msg.encode())
         await self.writer.drain()
 
-    async def _loadTask(self):
+    async def _loadTask(self) -> None:
         while len(self.nodes) < 1:
             await asyncio.sleep(3)
         while True:
@@ -101,11 +105,12 @@ class PyDuotecno:
                 return
             await asyncio.sleep(1)
 
-    async def readTask(self):
+    async def readTask(self) -> None:
         """Reader task."""
-        while self.connectionOK.is_set():
-            tmp = await self.reader.readline()
-            tmp = tmp.decode().rstrip()
+        while self.connectionOK.is_set() and self.reader:
+            tmp2 = await self.reader.readline()
+            tmp3 = tmp2.decode()
+            tmp = tmp3.rstrip()
             # self._log.debug(f'Raw Receive: "{tmp}"')
             if not tmp.startswith("["):
                 tmp = tmp.lstrip("[")
@@ -115,7 +120,7 @@ class PyDuotecno:
             self._log.debug(f'Receive: "{tmp}"')
             p = tmp.split(",")
             try:
-                pc = Packet(int(p[0]), int(p[1]), [int(_i) for _i in p[2:]])
+                pc = Packet(int(p[0]), int(p[1]), deque([int(_i) for _i in p[2:]]))
                 await self._handlePacket(pc)
             except Exception as e:
                 self._log.error(e)
@@ -124,7 +129,10 @@ class PyDuotecno:
                 self._log.error("Login failed")
                 self.connectionOK.clear()
 
-    async def _handlePacket(self, packet):
+    async def _handlePacket(self, packet: Packet) -> None:
+        if packet.cls is None:
+            self._log.debug(f"Ignoring packet: {packet}")
+            return
         if isinstance(packet.cls, EV_CLIENTCONNECTSET_3):
             if packet.cls.loginOK == 1:
                 self.loginOK.set()
