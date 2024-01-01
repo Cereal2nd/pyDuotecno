@@ -140,7 +140,7 @@ class SensUnit(BaseUnit):
         await self.writer(f"[137,19,{self.node.address},{self.unit}]")
         await super().requestStatus()
 
-    async def set_preset(self, preset: str) -> None:
+    async def set_preset(self, preset: int) -> None:
         await self.writer(f"[136,13,{self.node.address},{self.unit},{preset}]")
 
     async def turn_off(self) -> None:
@@ -194,10 +194,10 @@ class DimUnit(BaseUnit):
             return
         await super().handlePacket(packet)
 
-    def is_on(self) -> int:
+    def is_on(self) -> bool:
         if self._state == 0:
-            return 0
-        return 1
+            return False
+        return True
 
     def get_dimmer_state(self) -> int:
         return self._value
@@ -233,8 +233,10 @@ class SwitchUnit(BaseUnit):
             return
         await super().handlePacket(packet)
 
-    def is_on(self) -> int:
-        return self._state
+    def is_on(self) -> bool:
+        if self._state == 0:
+            return False
+        return True
 
     async def turn_on(self) -> None:
         """Switch on."""
@@ -298,8 +300,10 @@ class VirtualUnit(BaseUnit):
             return
         await super().handlePacket(packet)
 
-    def is_on(self) -> int:
-        return self._status
+    def is_on(self) -> bool:
+        if self._statu == 0:
+            return False
+        return True
 
 
 class ControlUnit(VirtualUnit):
