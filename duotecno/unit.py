@@ -301,7 +301,7 @@ class VirtualUnit(BaseUnit):
         await super().handlePacket(packet)
 
     def is_on(self) -> bool:
-        if self._statu == 0:
+        if self._status == 0:
             return False
         return True
 
