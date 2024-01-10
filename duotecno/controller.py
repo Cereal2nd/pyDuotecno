@@ -15,10 +15,6 @@ from duotecno.node import Node
 from duotecno.unit import BaseUnit
 
 
-def _on_reconnect_backoff(ikke):
-    print("backoff")
-
-
 class PyDuotecno:
     """Class that will will do the bus management.
 
