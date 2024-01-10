@@ -203,12 +203,14 @@ class DimUnit(BaseUnit):
         return self._value
 
     async def set_dimmer_state(self, value: int | None = None) -> None:
-        # first send on
+        # val > 0 => turn on
+        # val 0 but not None => turn off
+        # val = None => restore
         if value and value > 0:
             # set state and turn on
             await self.writer(f"[162,3,{self.node.address},{self.unit},{value}]")
             await self.writer(f"[162,10,{self.node.address},{self.unit}]")
-        elif value:
+        elif value is not None:
             # turn off
             await self.writer(f"[162,9,{self.node.address},{self.unit}]")
         else:

@@ -9,9 +9,14 @@ from duotecno.protocol import (
     EV_CLIENTCONNECTSET_3,
     EV_NODEDATABASEINFO_0,
     EV_NODEDATABASEINFO_1,
+    EV_HEARTBEATSTATUS_1,
 )
 from duotecno.node import Node
 from duotecno.unit import BaseUnit
+
+
+def _on_reconnect_backoff(ikke):
+    print("backoff")
 
 
 class PyDuotecno:
@@ -25,9 +30,14 @@ class PyDuotecno:
     writer: asyncio.StreamWriter | None = None
     reader: asyncio.StreamReader | None = None
     readerTask: asyncio.Task[None]
+    hbTask: asyncio.Task[None]
     loginOK: asyncio.Event
     connectionOK: asyncio.Event
+    heartbeatReceived: asyncio.Event
     nodes: dict[int, Node] = {}
+    host: str
+    port: int
+    password: str
 
     def get_units(self, unit_type: list[str] | str) -> list[BaseUnit]:
         res = []
@@ -39,31 +49,42 @@ class PyDuotecno:
     async def disconnect(self) -> None:
         self._log.debug("Disconnecting")
         self.connectionOK.clear()
+        self.loginOK.clear()
         if self.writer:
             self.writer.close()
+            await self.writer.wait_closed()
 
     async def connect(
         self, host: str, port: int, password: str, testOnly: bool = False
     ) -> None:
         """Initialize the connection."""
+        self.host = host
+        self.port = port
+        self.password = password
+        await self._do_connect(testOnly)
+
+    async def _do_connect(self, testOnly: bool = False) -> None:
         self.nodes = {}
         self._log = logging.getLogger("pyduotecno")
         # try to connect
         try:
-            self.reader, self.writer = await asyncio.open_connection(host, port)
+            self.reader, self.writer = await asyncio.open_connection(
+                self.host, self.port
+            )
         except (ConnectionError, TimeoutError):
             raise
         # events
         self.connectionOK = asyncio.Event()
         self.loginOK = asyncio.Event()
+        self.heartbeatReceived = asyncio.Event()
         # at this point the connection should be ok
         self.connectionOK.set()
         self.loginOK.clear()
+        self.heartbeatReceived.clear()
         # start the bus reading task
         self.readerTask = asyncio.Task(self.readTask())
-        # start loading, this task will kill itself once finished
-        passw = [str(ord(i)) for i in password]
         # send login info
+        passw = [str(ord(i)) for i in self.password]
         await self.write(f"[214,3,{len(passw)},{','.join(passw)}]")
         # wait for the login to be ok
         try:
@@ -80,6 +101,7 @@ class PyDuotecno:
             except TimeoutError:
                 raise LoadFailure()
             self._log.info("Loading finished")
+            self.hbTask = asyncio.Task(self.heartbeatTask())
 
     async def write(self, msg: str) -> None:
         """Send a message."""
@@ -87,11 +109,16 @@ class PyDuotecno:
             return
         if self.writer.transport.is_closing():
             await self.disconnect()
+            await self._do_connect()
             return
         self._log.debug(f"Send: {msg}")
         msg = f"{msg}{chr(10)}"
-        self.writer.write(msg.encode())
-        await self.writer.drain()
+        try:
+            self.writer.write(msg.encode())
+            await self.writer.drain()
+        except ConnectionError:
+            await self.disconnect()
+            await self._do_connect()
 
     async def _loadTask(self) -> None:
         while len(self.nodes) < 1:
@@ -105,10 +132,35 @@ class PyDuotecno:
                 return
             await asyncio.sleep(1)
 
+    async def heartbeatTask(self) -> None:
+        self._log.info("Starting HB task")
+        while True:
+            self.heartbeatReceived.clear()
+            try:
+                self._log.debug("Sending heartbeat message")
+                await self.write("[215,1]")
+                await asyncio.wait_for(self.heartbeatReceived.wait(), timeout=3.0)
+                self._log.debug("Received heartbeat message")
+            except TimeoutError:
+                self._log.warning("Timeout on heartbeat, resconnecting")
+                await self.disconnect()
+                await self._do_connect()
+                break
+            except asyncio.exceptions.CancelledError:
+                break
+            await asyncio.sleep(5)
+        self._log.info("Stopping HB task")
+
     async def readTask(self) -> None:
         """Reader task."""
         while self.connectionOK.is_set() and self.reader:
-            tmp2 = await self.reader.readline()
+            try:
+                tmp2 = await self.reader.readline()
+            except ConnectionError:
+                await self.disconnect()
+                await self._do_connect()
+            if tmp2 == "":
+                return
             tmp3 = tmp2.decode()
             tmp = tmp3.rstrip()
             # self._log.debug(f'Raw Receive: "{tmp}"')
@@ -117,6 +169,8 @@ class PyDuotecno:
             tmp = tmp.replace("\x00", "")
             # self._log.debug(f'Receive: "{tmp}"')
             tmp = tmp[1:-1]
+            if tmp == "":
+                return
             self._log.debug(f'Receive: "{tmp}"')
             p = tmp.split(",")
             try:
@@ -132,6 +186,9 @@ class PyDuotecno:
     async def _handlePacket(self, packet: Packet) -> None:
         if packet.cls is None:
             self._log.debug(f"Ignoring packet: {packet}")
+            return
+        if isinstance(packet.cls, EV_HEARTBEATSTATUS_1):
+            self.heartbeatReceived.set()
             return
         if isinstance(packet.cls, EV_CLIENTCONNECTSET_3):
             if packet.cls.loginOK == 1:

@@ -148,6 +148,10 @@ class BaseNodeUnitTypeMessage(BaseNodeUnitMessage):
         self.unitType = data.popleft()
 
 
+class EV_HEARTBEATSTATUS_1(BaseMessage):
+    pass
+
+
 class EV_CLIENTCONNECTSET_3(BaseMessage):
     loginOk: bool
 
