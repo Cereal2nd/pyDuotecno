@@ -208,8 +208,8 @@ class DimUnit(BaseUnit):
         # val = None => restore
         if value and value > 0:
             # set state and turn on
-            await self.writer(f"[162,3,{self.node.address},{self.unit},{value}]")
             await self.writer(f"[162,10,{self.node.address},{self.unit}]")
+            await self.writer(f"[162,3,{self.node.address},{self.unit},{value}]")
         elif value is not None:
             # turn off
             await self.writer(f"[162,9,{self.node.address},{self.unit}]")
