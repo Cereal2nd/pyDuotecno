@@ -159,6 +159,20 @@ class EV_CLIENTCONNECTSET_3(BaseMessage):
         self.loginOK = data.popleft()
 
 
+@unique
+class DbState(Enum):
+    Empty = 0
+    Busy = 1
+    Ready = 2
+
+
+class EV_NODEDATABASEINFO_5(BaseMessage):
+    state: DbState
+
+    def __init__(self, data: Deque[int]) -> None:
+        self.state = data.popleft()
+
+
 class EV_NODEDATABASEINFO_0(BaseMessage):
     numNode: int
 
