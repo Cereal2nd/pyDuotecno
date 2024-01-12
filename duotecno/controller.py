@@ -91,6 +91,7 @@ class PyDuotecno:
             raise InvalidPassword()
         # if we are not testing the connection, start scanning
         if not testOnly:
+            await self.write("[209,5]")
             await self.write("[209,0]")
             try:
                 await asyncio.wait_for(self._loadTask(), timeout=30.0)
