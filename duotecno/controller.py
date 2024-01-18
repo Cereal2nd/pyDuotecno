@@ -48,7 +48,9 @@ class PyDuotecno:
         self.loginOK.clear()
         if self.writer:
             self.writer.close()
+            self._log.debug("Waiting to finish disconnecting")
             await self.writer.wait_closed()
+        self._log.debug("Disconnecting Finished")
 
     async def connect(
         self, host: str, port: int, password: str, testOnly: bool = False
