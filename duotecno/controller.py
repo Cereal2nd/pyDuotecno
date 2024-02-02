@@ -1,6 +1,7 @@
 """Main interface to the duotecno bus."""
 from __future__ import annotations
 import asyncio
+import socket
 import logging
 from collections import deque
 from duotecno.exceptions import LoadFailure, InvalidPassword
@@ -13,7 +14,9 @@ from duotecno.protocol import (
 )
 from duotecno.node import Node
 from duotecno.unit import BaseUnit
-
+from homeassistant.config_entries import ConfigEntries
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.core import HomeAssistant
 
 class PyDuotecno:
     """Class that will will do the bus management.
@@ -35,6 +38,19 @@ class PyDuotecno:
     port: int
     password: str
 
+    def __init__(self, hass):
+        self.hass = hass
+
+    async def reload_integration(self):
+        self._log.debug("Reload the Duotecno integration.")
+        # Get all Duotecno config entries
+        entries = self.hass.config_entries.async_entries('duotecno')
+
+        # You may want to handle the case where the integration to reload has multiple entries (modules).
+        for entry in entries:
+            # Reload the integration
+            await self.hass.config_entries.async_reload(entry.entry_id)
+
     def get_units(self, unit_type: list[str] | str) -> list[BaseUnit]:
         res = []
         for node in self.nodes.values():
@@ -46,6 +62,8 @@ class PyDuotecno:
         self._log.debug("Disconnecting")
         self.connectionOK.clear()
         self.loginOK.clear()
+
+        self.readerTask.cancel()
         if self.writer:
             self.writer.close()
             self._log.debug("Waiting to finish disconnecting")
@@ -64,7 +82,8 @@ class PyDuotecno:
     async def _do_connect(self, testOnly: bool = False) -> None:
         self.nodes = {}
         self._log = logging.getLogger("pyduotecno")
-        # try to connect
+        # Try to connect
+        self._log.debug("Try to connect")
         try:
             self.reader, self.writer = await asyncio.open_connection(
                 self.host, self.port
@@ -76,6 +95,7 @@ class PyDuotecno:
         self.loginOK = asyncio.Event()
         self.heartbeatReceived = asyncio.Event()
         # at this point the connection should be ok
+        self._log.debug("Connection established")
         self.connectionOK.set()
         self.loginOK.clear()
         self.heartbeatReceived.clear()
@@ -107,8 +127,8 @@ class PyDuotecno:
         if not self.writer:
             return
         if self.writer.transport.is_closing():
-            await self.disconnect()
-            await self._do_connect()
+            #await self.disconnect()
+            #await self._do_connect()
             return
         self._log.debug(f"Send: {msg}")
         msg = f"{msg}{chr(10)}"
@@ -116,8 +136,9 @@ class PyDuotecno:
             self.writer.write(msg.encode())
             await self.writer.drain()
         except ConnectionError:
-            await self.disconnect()
-            await self._do_connect()
+            #await self.disconnect()
+            #await self._do_connect()
+            return
 
     async def _loadTask(self) -> None:
         while len(self.nodes) < 1:
@@ -131,6 +152,33 @@ class PyDuotecno:
                 return
             await asyncio.sleep(1)
 
+    async def check_tcp_connection(self, timeout=3) -> bool:
+        """Check if a TCP connection can be established to the given host and port."""
+        self._log.debug("Checking connection...")
+        conn = asyncio.open_connection(self.host, self.port)
+        try:
+            reader, writer = await asyncio.wait_for(conn, timeout=timeout)
+            writer.close()
+            await writer.wait_closed()
+            return True
+        except (asyncio.TimeoutError, OSError):
+            # Could not connect within the timeout period or there was a network error
+            return False
+
+    async def continuously_check_connection(self) -> None:
+        """Continuously check for connection restoration and reconnect."""
+        self._log.info("Waiting for connection...")
+        while True:
+            connection_restored = await self.check_tcp_connection()
+            if connection_restored:
+                self._log.info("Connection to host restored, reconnecting.")
+                await self._do_connect()
+                await self.reload_integration()
+                break
+            else:
+                self._log.debug("Connection to host not yet restored, retrying...")
+                await asyncio.sleep(5)
+
     async def heartbeatTask(self) -> None:
         self._log.info("Starting HB task")
         while True:
@@ -141,9 +189,10 @@ class PyDuotecno:
                 await asyncio.wait_for(self.heartbeatReceived.wait(), timeout=3.0)
                 self._log.debug("Received heartbeat message")
             except TimeoutError:
-                self._log.warning("Timeout on heartbeat, resconnecting")
+                self._log.warning("Timeout on heartbeat, reconnecting")
                 await self.disconnect()
-                await self._do_connect()
+                await self.continuously_check_connection()
+
                 break
             except asyncio.exceptions.CancelledError:
                 break
@@ -156,8 +205,10 @@ class PyDuotecno:
             try:
                 tmp2 = await self.reader.readline()
             except ConnectionError:
-                await self.disconnect()
-                await self._do_connect()
+                #await self.disconnect()
+                #await self._do_connect()
+                return
+
             if tmp2 == "":
                 return
             tmp3 = tmp2.decode()
