@@ -1,7 +1,6 @@
 """Main interface to the duotecno bus."""
 from __future__ import annotations
 import asyncio
-import socket
 import logging
 from collections import deque
 from duotecno.exceptions import LoadFailure, InvalidPassword
@@ -14,9 +13,7 @@ from duotecno.protocol import (
 )
 from duotecno.node import Node
 from duotecno.unit import BaseUnit
-from homeassistant.config_entries import ConfigEntries
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+
 
 class PyDuotecno:
     """Class that will will do the bus management.
@@ -44,9 +41,10 @@ class PyDuotecno:
     async def reload_integration(self):
         self._log.debug("Reload the Duotecno integration.")
         # Get all Duotecno config entries
-        entries = self.hass.config_entries.async_entries('duotecno')
+        entries = self.hass.config_entries.async_entries("duotecno")
 
-        # You may want to handle the case where the integration to reload has multiple entries (modules).
+        # You may want to handle the case where the integration
+        # to reload has multiple entries (modules).
         for entry in entries:
             # Reload the integration
             await self.hass.config_entries.async_reload(entry.entry_id)
@@ -127,8 +125,8 @@ class PyDuotecno:
         if not self.writer:
             return
         if self.writer.transport.is_closing():
-            #await self.disconnect()
-            #await self._do_connect()
+            # await self.disconnect()
+            # await self._do_connect()
             return
         self._log.debug(f"Send: {msg}")
         msg = f"{msg}{chr(10)}"
@@ -136,8 +134,8 @@ class PyDuotecno:
             self.writer.write(msg.encode())
             await self.writer.drain()
         except ConnectionError:
-            #await self.disconnect()
-            #await self._do_connect()
+            # await self.disconnect()
+            # await self._do_connect()
             return
 
     async def _loadTask(self) -> None:
@@ -192,7 +190,6 @@ class PyDuotecno:
                 self._log.warning("Timeout on heartbeat, reconnecting")
                 await self.disconnect()
                 await self.continuously_check_connection()
-
                 break
             except asyncio.exceptions.CancelledError:
                 break
@@ -205,10 +202,9 @@ class PyDuotecno:
             try:
                 tmp2 = await self.reader.readline()
             except ConnectionError:
-                #await self.disconnect()
-                #await self._do_connect()
+                # await self.disconnect()
+                # await self._do_connect()
                 return
-
             if tmp2 == "":
                 return
             tmp3 = tmp2.decode()
