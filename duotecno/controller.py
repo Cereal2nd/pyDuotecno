@@ -35,20 +35,6 @@ class PyDuotecno:
     port: int
     password: str
 
-    def __init__(self, hass):
-        self.hass = hass
-
-    async def reload_integration(self):
-        self._log.debug("Reload the Duotecno integration.")
-        # Get all Duotecno config entries
-        entries = self.hass.config_entries.async_entries("duotecno")
-
-        # You may want to handle the case where the integration
-        # to reload has multiple entries (modules).
-        for entry in entries:
-            # Reload the integration
-            await self.hass.config_entries.async_reload(entry.entry_id)
-
     def get_units(self, unit_type: list[str] | str) -> list[BaseUnit]:
         res = []
         for node in self.nodes.values():
@@ -77,8 +63,13 @@ class PyDuotecno:
         self.password = password
         await self._do_connect(testOnly)
 
-    async def _do_connect(self, testOnly: bool = False) -> None:
-        self.nodes = {}
+    async def _reconnect(self):
+        await self.disconnect()
+        await self.continuously_check_connection()
+
+    async def _do_connect(self, testOnly: bool = False, skipLoad: bool = False) -> None:
+        if not skipLoad:
+            self.nodes = {}
         self._log = logging.getLogger("pyduotecno")
         # Try to connect
         self._log.debug("Try to connect")
@@ -110,7 +101,10 @@ class PyDuotecno:
             await self.disconnect()
             raise InvalidPassword()
         # if we are not testing the connection, start scanning
-        if not testOnly:
+        if testOnly:
+            return
+        # do we need to reload the modules?
+        if not skipLoad:
             await self.write("[209,5]")
             await self.write("[209,0]")
             try:
@@ -118,15 +112,22 @@ class PyDuotecno:
             except TimeoutError:
                 raise LoadFailure()
             self._log.info("Loading finished")
-            self.hbTask = asyncio.Task(self.heartbeatTask())
+        else:
+            # in case of skipload we do want to request the status again
+            self._log.info("Requesting unit status")
+            for node in self.nodes.values():
+                for unit in node.get_units():
+                    self._log.debug(f"Unit: {unit}")
+                    await unit.requestStatus()
+        # start the heartbeat task
+        self.hbTask = asyncio.Task(self.heartbeatTask())
 
     async def write(self, msg: str) -> None:
         """Send a message."""
         if not self.writer:
             return
         if self.writer.transport.is_closing():
-            # await self.disconnect()
-            # await self._do_connect()
+            await self._reconnect()
             return
         self._log.debug(f"Send: {msg}")
         msg = f"{msg}{chr(10)}"
@@ -134,8 +135,7 @@ class PyDuotecno:
             self.writer.write(msg.encode())
             await self.writer.drain()
         except ConnectionError:
-            # await self.disconnect()
-            # await self._do_connect()
+            await self.reconnect()
             return
 
     async def _loadTask(self) -> None:
@@ -170,8 +170,7 @@ class PyDuotecno:
             connection_restored = await self.check_tcp_connection()
             if connection_restored:
                 self._log.info("Connection to host restored, reconnecting.")
-                await self._do_connect()
-                await self.reload_integration()
+                await self._do_connect(skipLoad=True)
                 break
             else:
                 self._log.debug("Connection to host not yet restored, retrying...")
@@ -188,8 +187,7 @@ class PyDuotecno:
                 self._log.debug("Received heartbeat message")
             except TimeoutError:
                 self._log.warning("Timeout on heartbeat, reconnecting")
-                await self.disconnect()
-                await self.continuously_check_connection()
+                await self._reconnect()
                 break
             except asyncio.exceptions.CancelledError:
                 break
@@ -202,8 +200,7 @@ class PyDuotecno:
             try:
                 tmp2 = await self.reader.readline()
             except ConnectionError:
-                # await self.disconnect()
-                # await self._do_connect()
+                await self._reconnect()
                 return
             if tmp2 == "":
                 return

@@ -58,6 +58,12 @@ class Node:
                 items.append(f"{k} = {v!r}")
         return "{}[{}]".format(type(self), ", ".join(items))
 
+    def get_units(self) -> list[BaseUnit]:
+        res = []
+        for unit in self.units.values():
+            res.append(unit)
+        return res
+
     def get_unit_by_type(self, unit_type: list[str] | str) -> list[BaseUnit]:
         if isinstance(unit_type, str):
             unit_type = [unit_type]
