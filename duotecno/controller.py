@@ -42,6 +42,16 @@ class PyDuotecno:
                 res.append(unit)
         return res
 
+    async def enableAllUnits(self) -> None:
+        self._log.debug("Enable all Units on all nodes")
+        for node in self.nodes.values():
+            await node.enable()
+
+    async def disableAllUnits(self) -> None:
+        self._log.debug("Disable all Units on all nodes")
+        for node in self.nodes.values():
+            await node.enable()
+
     async def disconnect(self) -> None:
         self._log.debug("Disconnecting")
         self.connectionOK.clear()
@@ -65,6 +75,7 @@ class PyDuotecno:
 
     async def _reconnect(self):
         await self.disconnect()
+        await self.disableAllUnits()
         await self.continuously_check_connection()
 
     async def _do_connect(self, testOnly: bool = False, skipLoad: bool = False) -> None:
@@ -119,8 +130,8 @@ class PyDuotecno:
                 for unit in node.get_units():
                     self._log.debug(f"Unit: {unit}")
                     await unit.requestStatus()
-        # start the heartbeat task
         self.hbTask = asyncio.Task(self.heartbeatTask())
+        await self.enableAllUnits()
 
     async def write(self, msg: str) -> None:
         """Send a message."""

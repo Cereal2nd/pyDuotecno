@@ -22,6 +22,7 @@ class BaseUnit:
     _on_status_update: list[Callable[[], Awaitable[None]]] = []
     name: str
     unit: int
+    available: bool
 
     def __init__(
         self,
@@ -35,9 +36,19 @@ class BaseUnit:
         self.name = name
         self.unit = unit
         self.writer = writer
+        self.available = True
         self._log.debug(
             f"New Unit: '{self.node.name}' => '{self.name}' = {type(self).__name__}"
         )
+
+    async def enable(self) -> None:
+        await self._update({"available": True})
+
+    async def disable(self) -> None:
+        await self._update({"available": False})
+
+    def is_available(self) -> bool:
+        return self.available
 
     def get_node_address(self) -> int:
         return self.node.get_address()
@@ -70,7 +81,7 @@ class BaseUnit:
                 f"[209,3,{self.node.address},{self.unit},{self._unitType}]"
             )
 
-    async def _update(self, data: dict[str, str | int | float]) -> None:
+    async def _update(self, data: dict[str, str | int | float | bool]) -> None:
         for key, new_val in data.items():
             cur_val = getattr(self, f"_{key}", None)
             if cur_val is None or cur_val != new_val:

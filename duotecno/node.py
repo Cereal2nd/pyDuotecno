@@ -45,6 +45,14 @@ class Node:
         self.units = {}
         self._log.debug(f"New node found: {self.name}")
 
+    async def enable(self) -> None:
+        for unit in self.units.values():
+            await unit.enable()
+
+    async def disable(self) -> None:
+        for unit in self.units.values():
+            await unit.disable()
+
     def get_name(self) -> str:
         return self.name
 
