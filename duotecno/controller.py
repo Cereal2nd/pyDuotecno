@@ -50,7 +50,7 @@ class PyDuotecno:
     async def disableAllUnits(self) -> None:
         self._log.debug("Disable all Units on all nodes")
         for node in self.nodes.values():
-            await node.enable()
+            await node.disable()
 
     async def disconnect(self) -> None:
         self._log.debug("Disconnecting")

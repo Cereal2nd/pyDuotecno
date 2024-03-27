@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 class BaseUnit:
     _unitType: int = 0
+    _available: bool = True
     _on_status_update: list[Callable[[], Awaitable[None]]] = []
     name: str
     unit: int
@@ -36,7 +37,6 @@ class BaseUnit:
         self.name = name
         self.unit = unit
         self.writer = writer
-        self.available = True
         self._log.debug(
             f"New Unit: '{self.node.name}' => '{self.name}' = {type(self).__name__}"
         )
@@ -48,7 +48,7 @@ class BaseUnit:
         await self._update({"available": False})
 
     def is_available(self) -> bool:
-        return self.available
+        return self._available
 
     def get_node_address(self) -> int:
         return self.node.get_address()
