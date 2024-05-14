@@ -6,7 +6,6 @@ from collections import deque
 from duotecno.exceptions import LoadFailure, InvalidPassword
 from duotecno.protocol import (
     Packet,
-    EV_CLIENTCONNECTSET_3,
     EV_NODEDATABASEINFO_0,
     EV_NODEDATABASEINFO_1,
     EV_HEARTBEATSTATUS_1,
@@ -145,7 +144,7 @@ class PyDuotecno:
         if self.writer.transport.is_closing():
             await self._reconnect()
             return
-        #self._log.debug(f"Send: {msg}")
+        # self._log.debug(f"Send: {msg}")
         await self.sendQueue.put(msg)
 
     async def sendTask(self) -> None:
@@ -260,7 +259,7 @@ class PyDuotecno:
         will clear an event and then wait for the event to be set again
         """
         self.packetWaiter.clear()
-        self.packetToWaitFor = pstr 
+        self.packetToWaitFor = pstr
         await self.packetWaiter.wait()
         self.packetToWaitFor = None
 
