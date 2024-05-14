@@ -32,6 +32,7 @@ class Node:
         nodeType: NodeType,
         numUnits: int,
         writer: Callable[[str], Awaitable[None]],
+        pwaiter: Callable[[str], Awaitable[None]],
     ) -> None:
         self._log = logging.getLogger("pyduotecno-node")
         self.name = name
@@ -40,6 +41,7 @@ class Node:
         self.numUnits = numUnits
         self.nodeType = nodeType
         self.writer = writer
+        self.pwaiter = pwaiter
         self.isLoaded = asyncio.Event()
         self.isLoaded.clear()
         self.units = {}
@@ -86,6 +88,7 @@ class Node:
         self._log.debug(f"Node {self.name}: Requesting units")
         for i in range(self.numUnits):
             await self.writer(f"[209,2,{self.address},{i}]")
+            await self.pwaiter(f"64,2,{self.address},{i}")
 
     async def handlePacket(self, packet: BaseMessage) -> None:
         if isinstance(packet, EV_NODEDATABASEINFO_2):

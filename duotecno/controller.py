@@ -27,9 +27,13 @@ class PyDuotecno:
     reader: asyncio.StreamReader | None = None
     readerTask: asyncio.Task[None]
     hbTask: asyncio.Task[None]
-    loginOK: asyncio.Event
+    handleTask: asyncio.Task[None]
+    receiveQueue: asyncio.Queue
+    sendQueue: asyncio.Queue
     connectionOK: asyncio.Event
     heartbeatReceived: asyncio.Event
+    packetToWaitFor: str | None = None
+    packetWaiter: asyncio.Event
     nodes: dict[int, Node] = {}
     host: str
     port: int
@@ -55,7 +59,6 @@ class PyDuotecno:
     async def disconnect(self) -> None:
         self._log.debug("Disconnecting")
         self.connectionOK.clear()
-        self.loginOK.clear()
 
         self.readerTask.cancel()
         if self.writer:
@@ -92,22 +95,24 @@ class PyDuotecno:
             raise
         # events
         self.connectionOK = asyncio.Event()
-        self.loginOK = asyncio.Event()
         self.heartbeatReceived = asyncio.Event()
+        self.packetWaiter = asyncio.Event()
         # at this point the connection should be ok
         self._log.debug("Connection established")
         self.connectionOK.set()
-        self.loginOK.clear()
         self.heartbeatReceived.clear()
         # start the bus reading task
+        self.sendTask = asyncio.Task(self.sendTask())
         self.readerTask = asyncio.Task(self.readTask())
+        self.handleTask = asyncio.Task(self.handleTask())
+        self.receiveQueue = asyncio.Queue()
+        self.sendQueue = asyncio.Queue()
         # send login info
         passw = [str(ord(i)) for i in self.password]
         await self.write(f"[214,3,{len(passw)},{','.join(passw)}]")
         # wait for the login to be ok
         try:
-            await asyncio.wait_for(self.loginOK.wait(), timeout=5.0)
-            await self.loginOK.wait()
+            await asyncio.wait_for(self.waitForPacket("67,3,1"), timeout=5.0)
         except TimeoutError:
             await self.disconnect()
             raise InvalidPassword()
@@ -140,14 +145,21 @@ class PyDuotecno:
         if self.writer.transport.is_closing():
             await self._reconnect()
             return
-        self._log.debug(f"Send: {msg}")
-        msg = f"{msg}{chr(10)}"
-        try:
-            self.writer.write(msg.encode())
-            await self.writer.drain()
-        except ConnectionError:
-            await self.reconnect()
-            return
+        #self._log.debug(f"Send: {msg}")
+        await self.sendQueue.put(msg)
+
+    async def sendTask(self) -> None:
+        """Send task."""
+        while self.connectionOK.is_set() and self.reader:
+            msg = await self.sendQueue.get()
+            self._log.debug(f"Transmitting: {msg}")
+            msg = f"{msg}{chr(10)}"
+            try:
+                self.writer.write(msg.encode())
+                await self.writer.drain()
+            except ConnectionError:
+                await self.reconnect()
+                return
 
     async def _loadTask(self) -> None:
         while len(self.nodes) < 1:
@@ -226,16 +238,41 @@ class PyDuotecno:
             if tmp == "":
                 return
             self._log.debug(f'Receive: "{tmp}"')
+            await self._comparePacket(tmp)
             p = tmp.split(",")
             try:
                 pc = Packet(int(p[0]), int(p[1]), deque([int(_i) for _i in p[2:]]))
-                await self._handlePacket(pc)
+                await self.receiveQueue.put(pc)
             except Exception as e:
                 self._log.error(e)
                 self._log.error(tmp)
-            if not self.loginOK.is_set():
-                self._log.error("Login failed")
-                self.connectionOK.clear()
+
+    async def _comparePacket(self, rpck: str) -> None:
+        if not self.packetToWaitFor:
+            return
+        self._log.debug(f"COMPARE received packet {rpck} with {self.packetToWaitFor}")
+        if rpck.startswith(self.packetToWaitFor):
+            self.packetWaiter.set()
+
+    async def waitForPacket(self, pstr: str) -> None:
+        """Wait for a certain packet.
+
+        will clear an event and then wait for the event to be set again
+        """
+        self.packetWaiter.clear()
+        self.packetToWaitFor = pstr 
+        await self.packetWaiter.wait()
+        self.packetToWaitFor = None
+
+    async def handleTask(self) -> None:
+        """handler task."""
+        while self.connectionOK.is_set() and self.receiveQueue:
+            try:
+                pc = await self.receiveQueue.get()
+                self._log.debug(f"Handle: {pc}")
+                await self._handlePacket(pc)
+            except Exception as e:
+                self._log.error(e)
 
     async def _handlePacket(self, packet: Packet) -> None:
         if packet.cls is None:
@@ -244,13 +281,10 @@ class PyDuotecno:
         if isinstance(packet.cls, EV_HEARTBEATSTATUS_1):
             self.heartbeatReceived.set()
             return
-        if isinstance(packet.cls, EV_CLIENTCONNECTSET_3):
-            if packet.cls.loginOK == 1:
-                self.loginOK.set()
-                return
         if isinstance(packet.cls, EV_NODEDATABASEINFO_0):
             for i in range(packet.cls.numNode):
                 await self.write(f"[209,1,{i}]")
+                await self.waitForPacket(f"64,1,{i}")
             return
         if isinstance(packet.cls, EV_NODEDATABASEINFO_1):
             if packet.cls.address not in self.nodes:
@@ -261,6 +295,7 @@ class PyDuotecno:
                     nodeType=packet.cls.nodeType,
                     numUnits=packet.cls.numUnits,
                     writer=self.write,
+                    pwaiter=self.waitForPacket,
                 )
                 await self.nodes[packet.cls.address].load()
             return
