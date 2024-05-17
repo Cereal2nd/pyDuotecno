@@ -134,6 +134,7 @@ class PyDuotecno:
                 for unit in node.get_units():
                     self._log.debug(f"Unit: {unit}")
                     await unit.requestStatus()
+        await asyncio.sleep(5)
         self.hbTask = asyncio.Task(self.heartbeatTask())
         await self.enableAllUnits()
 
