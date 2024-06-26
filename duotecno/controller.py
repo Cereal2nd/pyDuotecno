@@ -206,7 +206,7 @@ class PyDuotecno:
             try:
                 self._log.debug("Sending heartbeat message")
                 await self.write("[215,1]")
-                await asyncio.wait_for(self.heartbeatReceived.wait(), timeout=3.0)
+                await asyncio.wait_for(self.heartbeatReceived.wait(), timeout=10.0)
                 self._log.debug("Received heartbeat message")
             except TimeoutError:
                 self._log.warning("Timeout on heartbeat, reconnecting")
