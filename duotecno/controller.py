@@ -79,7 +79,7 @@ class PyDuotecno:
     async def _reconnect(self):
         await self.disconnect()
         await self.disableAllUnits()
-        # await self.continuously_check_connection()
+        await self.continuously_check_connection()
 
     async def _do_connect(self, testOnly: bool = False, skipLoad: bool = False) -> None:
         if not skipLoad:
