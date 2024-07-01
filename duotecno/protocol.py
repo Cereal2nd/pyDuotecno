@@ -78,6 +78,11 @@ class Packet:
     data: Deque[int]
     cls: BaseMessage | None = field(init=False)
 
+    def __lt__(self, other: Packet) -> bool:
+        if isinstance(other.cls, EV_HEARTBEATSTATUS_1):
+            return True
+        return False
+
     def __post_init__(self) -> None:
         """fill in the command name, make the subsclass."""
         try:

@@ -45,7 +45,7 @@ class Node:
         self.isLoaded = asyncio.Event()
         self.isLoaded.clear()
         self.units = {}
-        self._log.debug(f"New node found: {self.name}")
+        self._log.info(f"New node found: {self.name}")
 
     async def enable(self) -> None:
         for unit in self.units.values():
@@ -111,7 +111,6 @@ class Node:
                 self.units[packet.unit] = u(
                     self, name=packet.unitName, unit=packet.unit, writer=self.writer
                 )
-                await self.units[packet.unit].requestStatus()
             if len(self.units) == self.numUnits:
                 self.isLoaded.set()
             return

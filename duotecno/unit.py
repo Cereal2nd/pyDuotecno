@@ -37,7 +37,7 @@ class BaseUnit:
         self.name = name
         self.unit = unit
         self.writer = writer
-        self._log.debug(
+        self._log.info(
             f"New Unit: '{self.node.name}' => '{self.name}' = {type(self).__name__}"
         )
 
@@ -190,8 +190,8 @@ class SensUnit(BaseUnit):
 
 class DimUnit(BaseUnit):
     _unitType: int = 1
-    _state: int
-    _value: int
+    _state: int = 0
+    _value: int = 0
 
     async def handlePacket(self, packet: BaseMessage) -> None:
         if isinstance(packet, EV_UNITDIMSTATUS_0):
@@ -262,7 +262,7 @@ class SwitchUnit(BaseUnit):
 
 class DuoswitchUnit(BaseUnit):
     _unitType: int = 8
-    _state: int
+    _state: int = 1
 
     async def handlePacket(self, packet: BaseMessage) -> None:
         if isinstance(packet, EV_UNITDUOSWITCHSTATUS_0):
@@ -302,7 +302,7 @@ class DuoswitchUnit(BaseUnit):
 
 class VirtualUnit(BaseUnit):
     _unitType: int = 7
-    _status: int
+    _status: int = 0
 
     async def handlePacket(self, packet: BaseMessage) -> None:
         if isinstance(packet, EV_UNITCONTROLSTATUS_0):

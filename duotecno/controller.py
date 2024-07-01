@@ -6,6 +6,7 @@ from collections import deque
 from duotecno.exceptions import LoadFailure, InvalidPassword
 from duotecno.protocol import (
     Packet,
+    EV_CLIENTCONNECTSET_3,
     EV_NODEDATABASEINFO_0,
     EV_NODEDATABASEINFO_1,
     EV_HEARTBEATSTATUS_1,
@@ -26,9 +27,8 @@ class PyDuotecno:
     reader: asyncio.StreamReader | None = None
     readerTask: asyncio.Task[None]
     hbTask: asyncio.Task[None]
-    handleTask: asyncio.Task[None]
-    receiveQueue: asyncio.Queue
-    sendQueue: asyncio.Queue
+    workTask: asyncio.Task[None]
+    receiveQueue: asyncio.PriorityQueue
     connectionOK: asyncio.Event
     heartbeatReceived: asyncio.Event
     packetToWaitFor: str | None = None
@@ -37,6 +37,7 @@ class PyDuotecno:
     host: str
     port: int
     password: str
+    numNodes: int = 0
 
     def get_units(self, unit_type: list[str] | str) -> list[BaseUnit]:
         res = []
@@ -78,7 +79,7 @@ class PyDuotecno:
     async def _reconnect(self):
         await self.disconnect()
         await self.disableAllUnits()
-        await self.continuously_check_connection()
+        # await self.continuously_check_connection()
 
     async def _do_connect(self, testOnly: bool = False, skipLoad: bool = False) -> None:
         if not skipLoad:
@@ -101,11 +102,9 @@ class PyDuotecno:
         self.connectionOK.set()
         self.heartbeatReceived.clear()
         # start the bus reading task
-        self.sendTask = asyncio.Task(self.sendTask())
         self.readerTask = asyncio.Task(self.readTask())
-        self.handleTask = asyncio.Task(self.handleTask())
-        self.receiveQueue = asyncio.Queue()
-        self.sendQueue = asyncio.Queue()
+        self.workTask = asyncio.Task(self.handleTask())
+        self.receiveQueue = asyncio.PriorityQueue()
         # send login info
         passw = [str(ord(i)) for i in self.password]
         await self.write(f"[214,3,{len(passw)},{','.join(passw)}]")
@@ -123,18 +122,23 @@ class PyDuotecno:
             await self.write("[209,5]")
             await self.write("[209,0]")
             try:
-                await asyncio.wait_for(self._loadTask(), timeout=30.0)
+                await asyncio.wait_for(self._loadTaskNodes(), timeout=60.0)
+                self._log.info("Nodes discoverd")
+                for n in self.nodes.values():
+                    await n.load()
+                    await asyncio.sleep(0.1)
+                await asyncio.wait_for(self._loadTaskUnits(), timeout=120.0)
+                self._log.info("Units discoverd")
             except TimeoutError:
+                await self.disconnect()
                 raise LoadFailure()
-            self._log.info("Loading finished")
-        else:
-            # in case of skipload we do want to request the status again
-            self._log.info("Requesting unit status")
-            for node in self.nodes.values():
-                for unit in node.get_units():
-                    self._log.debug(f"Unit: {unit}")
-                    await unit.requestStatus()
-        await asyncio.sleep(5)
+        # in case of skipload we do want to request the status again
+        self._log.info("Requesting unit status")
+        for node in self.nodes.values():
+            for unit in node.get_units():
+                self._log.debug(f"Unit: {unit}")
+                await unit.requestStatus()
+                await asyncio.sleep(0.1)
         self.hbTask = asyncio.Task(self.heartbeatTask())
         await self.enableAllUnits()
 
@@ -145,32 +149,31 @@ class PyDuotecno:
         if self.writer.transport.is_closing():
             await self._reconnect()
             return
-        # self._log.debug(f"Send: {msg}")
-        await self.sendQueue.put(msg)
+        # self._log.debug(f"TX: {msg}")
+        msg = f"{msg}{chr(10)}"
+        try:
+            self.writer.write(msg.encode())
+            await self.writer.drain()
+        except ConnectionError:
+            await self.reconnect()
+            return
 
-    async def sendTask(self) -> None:
-        """Send task."""
-        while self.connectionOK.is_set() and self.reader:
-            msg = await self.sendQueue.get()
-            self._log.debug(f"Transmitting: {msg}")
-            msg = f"{msg}{chr(10)}"
-            try:
-                self.writer.write(msg.encode())
-                await self.writer.drain()
-            except ConnectionError:
-                await self.reconnect()
-                return
-
-    async def _loadTask(self) -> None:
+    async def _loadTaskNodes(self) -> None:
         while len(self.nodes) < 1:
             await asyncio.sleep(3)
+        while True:
+            if len(self.nodes) == self.numNodes:
+                return
+            await asyncio.sleep(1)
+
+    async def _loadTaskUnits(self) -> None:
         while True:
             c = 0
             for n in self.nodes.values():
                 if n.isLoaded.is_set():
                     c += 1
-            if c == len(self.nodes):
-                return
+                if c == len(self.nodes):
+                    return
             await asyncio.sleep(1)
 
     async def check_tcp_connection(self, timeout=3) -> bool:
@@ -200,6 +203,7 @@ class PyDuotecno:
                 await asyncio.sleep(5)
 
     async def heartbeatTask(self) -> None:
+        await asyncio.sleep(30)
         self._log.info("Starting HB task")
         while True:
             self.heartbeatReceived.clear()
@@ -214,7 +218,7 @@ class PyDuotecno:
                 break
             except asyncio.exceptions.CancelledError:
                 break
-            await asyncio.sleep(5)
+            await asyncio.sleep(10)
         self._log.info("Stopping HB task")
 
     async def readTask(self) -> None:
@@ -237,22 +241,26 @@ class PyDuotecno:
             tmp = tmp[1:-1]
             if tmp == "":
                 return
-            self._log.debug(f'Receive: "{tmp}"')
-            await self._comparePacket(tmp)
-            p = tmp.split(",")
-            try:
-                pc = Packet(int(p[0]), int(p[1]), deque([int(_i) for _i in p[2:]]))
-                await self.receiveQueue.put(pc)
-            except Exception as e:
-                self._log.error(e)
-                self._log.error(tmp)
+            # self._log.debug(f'RX: "{tmp}"')
+            if await self._comparePacket(tmp):
+                p = tmp.split(",")
+                try:
+                    pc = Packet(int(p[0]), int(p[1]), deque([int(_i) for _i in p[2:]]))
+                    await self.receiveQueue.put(pc)
+                # self._log.debug(f'QUEUE: "{pc}" {self.receiveQueue.qsize()}')
+                except Exception as e:
+                    self._log.error(e)
+                    self._log.error(tmp)
+            await asyncio.sleep(0.1)
 
-    async def _comparePacket(self, rpck: str) -> None:
+    async def _comparePacket(self, rpck: str) -> bool:
         if not self.packetToWaitFor:
-            return
-        self._log.debug(f"COMPARE received packet {rpck} with {self.packetToWaitFor}")
+            return True
+        # self._log.debug(f"COMPARE received packet {rpck} with {self.packetToWaitFor}")
         if rpck.startswith(self.packetToWaitFor):
             self.packetWaiter.set()
+            return True
+        return False
 
     async def waitForPacket(self, pstr: str) -> None:
         """Wait for a certain packet.
@@ -269,19 +277,23 @@ class PyDuotecno:
         while self.connectionOK.is_set() and self.receiveQueue:
             try:
                 pc = await self.receiveQueue.get()
-                self._log.debug(f"Handle: {pc}")
+                self._log.debug(f"WX: {pc}")
                 await self._handlePacket(pc)
             except Exception as e:
                 self._log.error(e)
+            await asyncio.sleep(0.1)
 
     async def _handlePacket(self, packet: Packet) -> None:
         if packet.cls is None:
             self._log.debug(f"Ignoring packet: {packet}")
             return
+        if isinstance(packet.cls, EV_CLIENTCONNECTSET_3):
+            return
         if isinstance(packet.cls, EV_HEARTBEATSTATUS_1):
             self.heartbeatReceived.set()
             return
         if isinstance(packet.cls, EV_NODEDATABASEINFO_0):
+            self.numNodes = packet.cls.numNode
             for i in range(packet.cls.numNode):
                 await self.write(f"[209,1,{i}]")
                 await self.waitForPacket(f"64,1,{i}")
@@ -297,7 +309,7 @@ class PyDuotecno:
                     writer=self.write,
                     pwaiter=self.waitForPacket,
                 )
-                await self.nodes[packet.cls.address].load()
+                # await self.nodes[packet.cls.address].load()
             return
         if hasattr(packet.cls, "address") and packet.cls.address in self.nodes:
             await self.nodes[packet.cls.address].handlePacket(packet.cls)
