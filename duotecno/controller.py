@@ -28,7 +28,10 @@ class PyDuotecno:
     readerTask: asyncio.Task[None]
     hbTask: asyncio.Task[None]
     workTask: asyncio.Task[None]
+    writerTask: asyncio.Task[None]
     receiveQueue: asyncio.PriorityQueue
+    sendSema: asyncio.Semaphore
+    sendQueue: asyncio.PriorityQueue
     connectionOK: asyncio.Event
     heartbeatReceived: asyncio.Event
     packetToWaitFor: str | None = None
@@ -102,9 +105,12 @@ class PyDuotecno:
         self.connectionOK.set()
         self.heartbeatReceived.clear()
         # start the bus reading task
-        self.readerTask = asyncio.Task(self.readTask())
-        self.workTask = asyncio.Task(self.handleTask())
         self.receiveQueue = asyncio.PriorityQueue()
+        self.sendQueue = asyncio.PriorityQueue()
+        self.sendSema = asyncio.Semaphore(5)
+        self.readerTask = asyncio.Task(self.readTask())
+        self.writerTask = asyncio.Task(self._writeTask())
+        self.workTask = asyncio.Task(self.handleTask())
         # send login info
         passw = [str(ord(i)) for i in self.password]
         await self.write(f"[214,3,{len(passw)},{','.join(passw)}]")
@@ -149,14 +155,22 @@ class PyDuotecno:
         if self.writer.transport.is_closing():
             await self._reconnect()
             return
-        # self._log.debug(f"TX: {msg}")
-        msg = f"{msg}{chr(10)}"
-        try:
-            self.writer.write(msg.encode())
-            await self.writer.drain()
-        except ConnectionError:
-            await self.reconnect()
-            return
+        self._log.debug(f"TX: {msg}")
+        await self.sendQueue.put(msg)
+        return
+
+    async def _writeTask(self) -> None:
+        while True:
+            try:
+                await self.sendSema.acquire()
+                msg = await self.sendQueue.get()
+                msg = f"{msg}{chr(10)}"
+                self.writer.write(msg.encode())
+                await self.writer.drain()
+                await asyncio.sleep(0.1)
+            except ConnectionError:
+                await self.reconnect()
+                return
 
     async def _loadTaskNodes(self) -> None:
         while len(self.nodes) < 1:
@@ -241,7 +255,8 @@ class PyDuotecno:
             tmp = tmp[1:-1]
             if tmp == "":
                 return
-            # self._log.debug(f'RX: "{tmp}"')
+            self._log.debug(f'RX: "{tmp}"')
+            self.sendSema.release()
             if await self._comparePacket(tmp):
                 p = tmp.split(",")
                 try:
