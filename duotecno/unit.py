@@ -21,9 +21,9 @@ class BaseUnit:
     _unitType: int = 0
     _available: bool = True
     _on_status_update: list[Callable[[], Awaitable[None]]] = []
-    name: str
-    unit: int
-    available: bool
+    name: str = ""
+    unit: int = 0
+    available: bool = True
 
     def __init__(
         self,
@@ -92,18 +92,18 @@ class BaseUnit:
 
 class SensUnit(BaseUnit):
     _unitType: int = 4
-    _state: int
-    _preset: int
-    _cur_temp: float
-    _setp_sun: float
-    _setp_hsun: float
-    _setp_moon: float
-    _setp_hmoon: float
-    _offset: float
-    _swing_angle: float
-    _woking_mode: float
-    _fan_speed: float
-    _swing_mode: float
+    _state: int = 0
+    _preset: int = 0
+    _cur_temp: float = 0.0
+    _setp_sun: float = 0.0
+    _setp_hsun: float = 0.0
+    _setp_moon: float = 0.0
+    _setp_hmoon: float = 0.0
+    _offset: float = 0.0
+    _swing_angle: float = 0.0
+    _woking_mode: float = 0.0
+    _fan_speed: float = 0.0
+    _swing_mode: float = 0.0
 
     async def handlePacket(self, packet: BaseMessage) -> None:
         if isinstance(packet, EV_UNITSENSSTATUS_0) or isinstance(
@@ -231,7 +231,7 @@ class DimUnit(BaseUnit):
 
 class SwitchUnit(BaseUnit):
     _unitType: int = 2
-    _state: int
+    _state: int = 0
 
     async def handlePacket(self, packet: BaseMessage) -> None:
         if isinstance(packet, EV_UNITSWITCHSTATUS_0):
