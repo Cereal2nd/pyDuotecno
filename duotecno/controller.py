@@ -175,8 +175,8 @@ class PyDuotecno:
     async def _writeTask(self) -> None:
         while True:
             try:
-                await self.sendSema.acquire()
                 msg = await self.sendQueue.get()
+                await self.sendSema.acquire()
                 msg = f"{msg}{chr(10)}"
                 self.writer.write(msg.encode())
                 await self.writer.drain()
