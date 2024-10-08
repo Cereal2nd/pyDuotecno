@@ -145,11 +145,8 @@ class SensUnit(BaseUnit):
         await super().handlePacket(packet)
 
     async def requestStatus(self) -> None:
-        await self.writer(f"[137,16,{self.node.address},{self.unit}]")
-        await self.writer(f"[137,17,{self.node.address},{self.unit}]")
-        await self.writer(f"[137,18,{self.node.address},{self.unit}]")
-        await self.writer(f"[137,19,{self.node.address},{self.unit}]")
-        await super().requestStatus()
+        # We should never do this for sensunits, as not all senseunits will work
+        pass
 
     async def set_preset(self, preset: int) -> None:
         await self.writer(f"[136,13,{self.node.address},{self.unit},{preset}]")
